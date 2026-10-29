@@ -206,6 +206,17 @@ class Tests(unittest.TestCase):
         self.assertIn("[matched: Chase/due]", plain)
         self.assertIn("🚨", dry(True))
 
+    def test_stale_due_is_dropped_and_bare_sender_named(self):
+        old = msg("r0", "no-reply@essex.com", "Your Rent Payment is Due Soon", day=1,
+                  body="your rent is due today, October 1st.")
+        old["payload"]["headers"][2]["value"] = "Wed, 30 Sep 2026 09:00:00 -0700"
+        text = self.run_text(FakeGoogle(MAIN + [old]))
+        self.assertNotIn("Payment due: Rent: Your Rent Payment is Due Soon  [due Thu 10/1]", text)   # not in the unpaid ledger
+        from brief.models import Mail
+        from brief.render import sender_name
+        self.assertEqual(sender_name(Mail("x", "TurboTax@em1.turbotax.intuit.com", "s", "", NOW)), "intuit.com")
+        self.assertEqual(sender_name(Mail("x", "Prof <p@school.edu>", "s", "", NOW)), "Prof")
+
     def test_paid_settles_due(self):
         paid = msg("c9", "noreplyalerts@chase.com", "We've received your Sample Visa payment", day=28)
         text = self.run_text(FakeGoogle(MAIN + [paid]))

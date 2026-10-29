@@ -80,7 +80,7 @@ def collect_mail(g, tz, since, account, rules, n_sender, billers):
     return [enrich(g, mid, tz, account, rules, n_sender, billers) for mid in g.search(q, 100)]
 
 
-def collect_open_bills(g, tz, now, days, account, rules, n_sender, billers):
+def collect_open_bills(g, tz, now, days, account, rules, n_sender, billers, grace=5):
     """Look back for 'payment due' notices that no later 'paid' notice has settled."""
     since = now - timedelta(days=days)
     q = (f"after:{int(since.timestamp())} -in:spam -in:trash "
@@ -90,6 +90,8 @@ def collect_open_bills(g, tz, now, days, account, rules, n_sender, billers):
     out = []
     for m in mails:
         if m.event not in ("due", "statement") or m.due is None:
+            continue
+        if m.due < now.date() - timedelta(days=grace):   # long past with no payment notice: most likely autopaid or paid elsewhere
             continue
         settled = any(p.biller == m.biller and p.account == m.account and p.when >= m.when for p in paid)
         later = any(o.biller == m.biller and o.account == m.account and o.event in ("due", "statement")
@@ -102,7 +104,8 @@ def collect_open_bills(g, tz, now, days, account, rules, n_sender, billers):
 def gather(name, g, cfg, tz, now, since, day_end, rules, n_sender, billers):
     events = collect_events(g, cfg, tz, datetime.combine(now.date(), time.min, tz), day_end)
     mails = collect_mail(g, tz, since, name, rules, n_sender, billers)
-    open_bills = collect_open_bills(g, tz, now, cfg["bills"]["lookback_days"], name, rules, n_sender, billers)
+    open_bills = collect_open_bills(g, tz, now, cfg["bills"]["lookback_days"], name, rules, n_sender, billers,
+                                    cfg["bills"].get("overdue_grace_days", 5))
     return events, mails, open_bills
 
 

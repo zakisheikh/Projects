@@ -58,7 +58,12 @@ def hw_line(ev, aliases):
 
 
 def sender_name(m):
-    return m.sender.split("<")[0].strip().strip('"') or m.sender
+    name = m.sender.split("<")[0].strip().strip('"')
+    if name and "@" not in name:
+        return name
+    addr = m.sender.split("<")[-1].strip("> ")      # bare address: show the company domain, not the mailbox
+    domain = addr.split("@")[-1].split(".")
+    return ".".join(domain[-2:]) if len(domain) >= 2 else addr
 
 
 def mail_line(m, who=None):

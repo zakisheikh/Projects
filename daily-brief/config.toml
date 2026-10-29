@@ -46,6 +46,7 @@ homework_pattern = '(?i)\b(homework|assignment|hw ?\d+|quiz|exam|midterm|essay|p
 [bills]
 lookback_days = 40       # how far back to look for an unpaid "payment due" notice
 due_soon_days = 3        # "needs attention" when due within this many days (or overdue)
+overdue_grace_days = 5   # a due date older than this with no payment notice is assumed paid (autopay etc.) and dropped
 
 [mail]
 max_per_section = 8
