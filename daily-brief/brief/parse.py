@@ -31,7 +31,8 @@ def parse_event(raw, calendar, tz: ZoneInfo, hw_re, all_homework=False, compact=
     hint = HINT.search(desc)
     homework = all_homework or bool(tag and tag_is_homework) or bool(hw_re.search(f"{title} {desc[:300]}"))
     return Event(title, start, end, all_day, calendar, raw.get("location", ""), homework, compact, course,
-                 f"by {hint.group(1).upper().replace('.', '')}" if hint and homework else "")
+                 f"by {hint.group(1).upper().replace('.', '')}" if hint and homework else "",
+                 (raw.get("creator") or {}).get("email", "").lower())
 
 
 def _walk(part):

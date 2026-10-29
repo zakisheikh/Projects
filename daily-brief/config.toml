@@ -27,14 +27,19 @@ name = "zakisheikh21"
 token_env = "GOOGLE_REFRESH_TOKEN_2"
 
 [calendar]
-exclude_calendars = ["Holidays in United States", "Birthdays", "Phases of the Moon"]
-compact_calendars = ["Prayer Times"]      # shown as one line instead of one bullet per prayer
+exclude_calendars = ["Holidays in United States", "Birthdays", "Phases of the Moon", "Prayer Times", "Muslim Holidays", "Zaheer Calendar", "Family"]
+partner_emails = ["narjisirfan@gmail.com"]   # events created by these people are tagged with partner_label
+partner_label = "Narjis"
 lookahead_days = 7
 # Calendars whose every event is an assignment (e.g. the subscribed Canvas feed). Fill in the calendar's name.
 # Canvas feeds import as all-day events titled "<assignment> [<COURSE>]"; the date is the due date.
 homework_calendars = ["Zaki Sheikh Calendar (Canvas)"]
-# Canvas items that are not assignments (shown separately as notices). Timed (non all-day) Canvas events are notices too.
-notice_pattern = '(?i)\b(poll|survey|vote|advising|enrollment|registration|office hours|announcement)\b'
+# Canvas items that are not assignments (shown as notices). Timed (non all-day) Canvas events are notices too.
+notice_pattern = '(?i)\b(poll|survey|vote|office hours|announcement)\b'
+# Dropped entirely (you chose not to hear about these).
+homework_exclude_pattern = '(?i)\b(enrollment|advising|registration)\b'
+# Assignments matching this are listed separately so they stand out.
+exam_pattern = '(?i)\b(exam|quiz|midterm|final exam|presentation|test)\b'
 course_tag_is_homework = true             # any event ending in a [COURSE] tag counts (Canvas copies in your main calendar too)
 # For all other calendars, events matching this are treated as homework.
 homework_pattern = '(?i)\b(homework|assignment|hw ?\d+|quiz|exam|midterm|essay|problem set|pset|lab report|worksheet)\b'
@@ -71,7 +76,7 @@ rules = [
   { subject = '(?i)payment is due', event = "due" },
   { subject = '(?i)statement is available', event = "statement" },
   { subject = '(?i)(received|posted|scheduled) your .*payment|payment (was )?(received|posted|scheduled)', event = "paid" },
-  { subject = '(?i)balance is \$', event = "balance" },
+  { subject = '(?i)balance is \$', event = "ignore" },
   { subject = '(?i)fraud|unusual|suspicious|declin|security|locked', event = "alert" },
   { subject = '(?i)credit limit|offer|reward', event = "ignore" },
   { subject = '(?i)new letter', event = "info" },
@@ -114,7 +119,7 @@ name = "Patelco"
 kind = "bank"
 from = '(?i)patelco\.org|services\.pscu\.com'
 rules = [
-  { subject = '(?i)balance summary', event = "balance" },
+  { subject = '(?i)balance summary', event = "ignore" },
   { subject = '(?i)fraud|declin|unusual|overdraft|low balance', event = "alert" },
 ]
 [[billers]]
@@ -127,13 +132,14 @@ rules = [
   { subject = '.', event = "ignore" },
 ]
 [[billers]]
-name = "Rent"
+name = "Rent (Essex)"
 kind = "rent"
 from = '(?i)@essex\.com|rentcafe\.com|appfolio'
 rules = [
   { subject = '(?i)rent payment is due|rent.*due|payment.*due', event = "due" },
   { subject = '(?i)payment (received|confirmation)|receipt', event = "paid" },
-  { subject = '(?i)late|past due|notice', event = "alert" },
+  { subject = '(?i)late|past due', event = "alert" },
+  { subject = '.', event = "admin" },
 ]
 [[billers]]
 name = "Conservice utilities"
@@ -183,17 +189,38 @@ kind = "marketing"
 from = '(?i)chargepoint\.com'
 rules = [{ subject = '.', event = "ignore" }]
 [[billers]]
-name = "Receipts"
-kind = "receipt"
-from = '(?i)(invoice|receipts?)@(mail\.)?(anthropic|united)\.com|googleplay-noreply|orders\.apple\.com|noreply-payments@booking\.com|ziosk|hertznoreply'
-rules = [{ subject = '.', event = "receipt" }]
+name = "Receipts and orders (muted)"
+kind = "marketing"
+from = '(?i)invoice@mail\.anthropic\.com|googleplay-noreply|orders\.apple\.com|ziosk|amazon\.com|shopifyemail'
+rules = [{ subject = '.', event = "ignore" }]
+[[billers]]
+name = "Investments and newsletters (muted)"
+kind = "marketing"
+from = '(?i)fidelity\.com|beehiiv\.com|creditkarma\.com|historyfacts|mcmap'
+rules = [{ subject = '.', event = "ignore" }]
+[[billers]]
+name = "United"
+kind = "travel"
+from = '(?i)united\.com'
+rules = [{ subject = '.', event = "travel" }]
+[[billers]]
+name = "Hertz"
+kind = "travel"
+from = '(?i)hertz\.com'
+rules = [{ subject = '.', event = "travel" }]
+[[billers]]
+name = "Booking.com"
+kind = "travel"
+from = '(?i)booking\.com'
+rules = [{ subject = '.', event = "travel" }]
 
 # ---------------------------------------------------------------------------
 # Generic keyword rules: catch mail from senders not listed above. Subject/snippet only.
 # ---------------------------------------------------------------------------
 [mail.rules.health]
 sender = []
-text   = ['(?i)explanation of benefits', '(?i)patient (balance|statement)', '(?i)medical (bill|statement)', '(?i)claim (processed|denied)', '(?i)\bcopay\b', '(?i)lab results?']
+text   = ['(?i)explanation of benefits', '(?i)patient (balance|statement)', '(?i)medical (bill|statement)', '(?i)claim (processed|denied)', '(?i)\bcopay\b',
+          '(?i)lab results?', '(?i)test results?', '(?i)appointment (reminder|confirmed|scheduled)', '(?i)visit summary', '(?i)\bmychart\b']
 [mail.rules.card]
 sender = []
 text   = ['(?i)statement (is )?(ready|available)', '(?i)minimum payment', '(?i)(fraud|unusual|suspicious) (activity|alert|transaction)', '(?i)\bautopay\b']
@@ -203,12 +230,18 @@ text   = ['(?i)\binvoice\b', '(?i)past due|overdue', '(?i)amount due', '(?i)bill
 [mail.rules.receipt]
 sender = []
 text   = ['(?i)\breceipt\b', '(?i)order confirmation']
-[mail.rules.school]
-sender = ['(?i)(classroom\.google|instructure|canvas|blackboard|schoology|gradescope|piazza)']
-text   = ['(?i)\bassignment\b', '(?i)grade posted', '(?i)missing work']
-[mail.rules.security]
-sender = []
-text   = ['(?i)security alert', '(?i)new sign-?in', '(?i)password (reset|changed)', '(?i)account (locked|suspended)']
 [mail.rules.logistics]
 sender = []
-text   = ['(?i)out for delivery', '(?i)\bflight\b', '(?i)itinerary', '(?i)check-?in', '(?i)reservation']
+text   = ['(?i)\bflight\b', '(?i)itinerary', '(?i)check-?in', '(?i)reservation', '(?i)boarding']
+[mail.rules.renewal]
+sender = []
+text   = ['(?i)\brenews?\b', '(?i)renewal', '(?i)auto-?renew', '(?i)trial (ends|ending|expires)', '(?i)will be charged', '(?i)your subscription']
+[mail.rules.action]
+sender = []
+text   = ['(?i)action (needed|required)', '(?i)respond by', '(?i)please confirm', '(?i)verify your', '(?i)update your .* by']
+[mail.rules.government]
+sender = ['(?i)\.gov\b|\bdmv\b|\birs\b|courts?\.']
+text   = ['(?i)notice of', '(?i)summons', '(?i)jury', '(?i)\bIRS\b', '(?i)\bDMV\b', '(?i)court date']
+[mail.rules.community]
+sender = ['(?i)camphujjah|noorcollective|masjid|mosque']
+text   = ['(?i)\bzakat\b', '(?i)donation', '(?i)\bcamp\b.*(invoice|payment|balance)', '(?i)(mosque|masjid|foundation)']

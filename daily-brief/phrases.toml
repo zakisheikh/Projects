@@ -95,23 +95,6 @@ quip_busy = [
   "You have your work cut out for you.",
   "It's a packed schedule, {sir}. Pace yourself.",
 ]
-quip_light = [
-  "A light day, {sir}.",
-  "Mercifully quiet.",
-  "Plenty of breathing room today.",
-]
-prayer_line = [
-  "For prayer, {items}.",
-  "Prayer times: {items}.",
-  "And for prayer today, {items}.",
-  "Your prayer times: {items}.",
-]
-tomorrow_open = [
-  "Looking ahead to tomorrow:",
-  "A glance at tomorrow, {sir}:",
-  "So that tomorrow holds no surprises:",
-  "Tomorrow's agenda:",
-]
 
 # ---------------------------------------------------------------- coursework
 homework_none = [
@@ -134,44 +117,17 @@ paid_open = [
   "Confirmed paid:",
   "Good news, {sir}. The following went through:",
 ]
-balance_line = [
-  "For reference, your balances:",
-  "Quick check of the balances:",
-  "On the balance front:",
-]
-receipts_line = [
-  "{n} receipts came in, from {sources}. Filed and forgotten.",
-  "I've noted {n} receipts ({sources}); nothing for you to do.",
-  "{n} receipts from {sources}, all accounted for.",
-]
-receipt_one = [
-  "One receipt came in, from {sources}. Nothing for you to do.",
-  "A receipt from {sources} has arrived. Filed.",
-]
 
 # ---------------------------------------------------------------- mail
-health_redacted = [
-  "There's medical correspondence waiting: {thing}. The details are in your email.",
-  "I have {thing} for you. I'll keep the specifics for your email.",
-  "Health paperwork: {thing}. Details by email, for discretion's sake.",
-]
 health_open = [
   "On the health front:",
   "Medical correspondence has arrived:",
   "Health paperwork, {sir}:",
 ]
-school_open = [
-  "From your schools:",
-  "School mail worth a look:",
-]
 logistics_open = [
   "On the travel and delivery front:",
   "Logistics, {sir}:",
   "Regarding your travels and deliveries:",
-]
-info_open = [
-  "A few account notices:",
-  "Some account housekeeping:",
 ]
 mail_open = [
   "Mail I thought you'd want to see:",
@@ -217,13 +173,6 @@ see_email = [
   "Your email has the complete picture.",
 ]
 more_priority = ["{k} more in your email.", "and {k} more besides, in your email.", "{k} further items are in your email."]
-also_line = [
-  "Beyond that: {items}.",
-  "Also on my radar: {items}.",
-  "In the background, I'm tracking {items}.",
-  "And for completeness: {items}.",
-  "Lesser matters: {items}.",
-]
 
 follow_up = [
   "Follow up with {who}.",
@@ -269,4 +218,34 @@ statements_no_due = [
   "New statements arrived without a due date: {items}.",
   "{items} sent statements but gave no due date. Worth a glance when you can.",
   "Statements have landed from {items}; none states a due date.",
+]
+
+exams_open = [
+  "Exams and presentations on the horizon:",
+  "The ones that count, {sir}: exams and presentations:",
+  "Mark these down. Exams and presentations:",
+  "Heavier items ahead, exams and presentations:",
+  "Tests and presentations to prepare for:",
+]
+overlap_warning = [
+  "Heads up, {sir}: {a} overlaps with {b} at {t}.",
+  "A scheduling collision: {a} and {b} both claim {t}.",
+  "You can't be in two places at {t}: {a} versus {b}.",
+  "Note the clash between {a} and {b} around {t}.",
+]
+admin_open = [
+  "Life admin, {sir}:",
+  "Housekeeping from the wider world:",
+  "Some administrative matters:",
+  "Paperwork and notices:",
+]
+renewals_open = [
+  "Subscriptions and renewals:",
+  "Recurring charges, {sir}:",
+  "On the subscription front:",
+]
+action_open = [
+  "Things asking for action:",
+  "These want a response, {sir}:",
+  "Action requested:",
 ]

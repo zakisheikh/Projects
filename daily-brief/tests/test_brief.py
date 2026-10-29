@@ -44,6 +44,11 @@ MAIN = [
     msg("x2", "receipts@united.com", "eTicket Itinerary and Receipt for Confirmation ABC"),
     msg("p1", "Prof <prof@school.edu>", "Reminder", labels=("INBOX", "UNREAD", "IMPORTANT")),
     msg("p2", "Friend <f@x.com>", "lunch?", labels=("INBOX", "UNREAD", "IMPORTANT")),
+    msg("a1", "noreply@creators.spotify.com", "[Action needed] Update your login by December 7th", "Update your login by December 7th."),
+    msg("e1", "miramonte@essex.com", "Your Document is Ready to Sign - Unit G201"),
+    msg("m1", "Fidelity.Investments.email@shareholderdocs.fidelity.com", "Vote now! MICROSOFT Annual Meeting"),
+    msg("m2", "return@amazon.com", "Return request confirmed for 2Pcs Disposable Oil Splash Guard"),
+    msg("h3", "reservations@emails.hertz.com", "Zaki, thanks for booking!"),
 ]
 OTHER = [msg("o1", "camp@gmail.com", "Reminder: 2026 Invoice - PAYMENT IS NOW OVERDUE", body="Total Registration Cost: $460")]
 
@@ -57,7 +62,8 @@ class FakeGoogle:
 
     def calendars(self):
         return [{"id": "primary", "summary": "Me"}, {"id": "canvas", "summary": "Zaki Sheikh Calendar (Canvas)"},
-                {"id": "pray", "summary": "Prayer Times"}, {"id": "moon", "summary": "Phases of the Moon"}]
+                {"id": "pray", "summary": "Prayer Times"}, {"id": "moon", "summary": "Phases of the Moon"},
+                {"id": "zah", "summary": "Zaheer Calendar"}]
 
     def events(self, cid, start, end):
         canvas = [
@@ -70,6 +76,9 @@ class FakeGoogle:
              "end": {"date": "2026-10-31"}, "description": "Please submit your preference by [Friday, October 30 at 7:00 PM]."},
             {"summary": "Essay 2 [FA26: CS-157B Sec 01 - Data BS Man Sys II]", "start": {"date": "2026-11-03"},
              "end": {"date": "2026-11-04"}},
+            {"summary": "Midterm Exam [CS549-09-Fall2026]", "start": {"date": "2026-11-02"}, "end": {"date": "2026-11-03"}},
+            {"summary": "Spring 2027 Enrollment Appointment Viewable [College of Science]",
+             "start": {"dateTime": "2026-10-30T08:00:00-07:00"}, "end": {"dateTime": "2026-10-30T08:30:00-07:00"}},
         ]
         if cid == "canvas":
             return canvas
@@ -77,12 +86,16 @@ class FakeGoogle:
             return [{"summary": "Fajr", "start": {"dateTime": "2026-10-29T05:50:00-07:00"}, "end": {"dateTime": "2026-10-29T06:10:00-07:00"}},
                     {"summary": "Zuhr", "start": {"dateTime": "2026-10-29T12:32:00-07:00"}, "end": {"dateTime": "2026-10-29T12:52:00-07:00"}},
                     {"summary": "Maghrib", "start": {"dateTime": "2026-10-29T18:16:00-07:00"}, "end": {"dateTime": "2026-10-29T18:36:00-07:00"}}]
+        if cid == "zah":
+            return [{"summary": "Tri valley ortho PT", "start": {"dateTime": "2026-10-29T16:00:00-07:00"}, "end": {"dateTime": "2026-10-29T17:00:00-07:00"}}]
         if cid == "moon":
             return [{"summary": "Full moon", "start": {"date": "2026-10-29"}, "end": {"date": "2026-10-30"}}]
         return [
             {"summary": "Standup", "start": {"dateTime": "2026-10-29T09:00:00-07:00"}, "end": {"dateTime": "2026-10-29T09:30:00-07:00"}},
             {"summary": "Dentist", "location": "Main St, San Diego", "start": {"dateTime": "2026-10-29T15:00:00-07:00"}, "end": {"dateTime": "2026-10-29T16:00:00-07:00"}},
             canvas[0],     # Canvas copy that also lives in the primary calendar
+            {"summary": "Kazim bday party", "creator": {"email": "narjisirfan@gmail.com"},
+             "start": {"dateTime": "2026-10-29T15:30:00-07:00"}, "end": {"dateTime": "2026-10-29T17:00:00-07:00"}},
         ]
 
     def search(self, q, limit=100):
@@ -152,11 +165,12 @@ class Tests(unittest.TestCase):
 
     def test_full_email_version(self):
         text = self.run_text(FakeGoogle(MAIN))
-        for must in ("3:00pm · Dentist", "Zuhr at 12:32 PM", "(ML)", "7:00 PM", "Databases", "Quick Poll", "$40.00", "autopay",
+        for must in ("3:00pm · Dentist", "(ML)", "7:00 PM", "Databases", "Quick Poll", "$40.00", "autopay",
                      "Unusual activity on your card", "$144.18", "Verizon", "$290.01", "Explanation of Benefits",
-                     "2 receipts", "$3,628.15", "lunch?", "Rent"):
+                     "lunch?", "Rent", "United", "Hertz", "spotify.com", "Essex"):
             self.assertIn(must, text, must)
-        for mustnt in ("Standup", "Full moon", "Fajr", "reward you", "missing out", "Get reimbursed", "$2,900.26"):
+        for mustnt in ("Standup", "Full moon", "Fajr", "Zuhr", "Tri valley", "reward you", "missing out", "Get reimbursed", "$2,900.26",
+                       "$3,628.15", "Fidelity", "Amazon", "Enrollment", "receipts"):
             self.assertNotIn(mustnt, text, mustnt)
         self.assertEqual(text.count("Final Project: Proposal"), 1)       # Canvas copy in two calendars -> once
         for heading in ("PRIORITY ITEMS", "REMAINING SCHEDULE", "NEEDS ATTENTION", "HEALTH & MEDICAL"):
@@ -167,8 +181,7 @@ class Tests(unittest.TestCase):
         tg = out.split("--- telegram preview ---")[1].strip()
         self.assertLess(len(tg), 1400)
         self.assertLessEqual(len(tg.split("\n\n")), 8)
-        self.assertIn("medical item", tg)               # health folded into one line
-        for hidden in ("Aetna", "Zuhr", "Explanation"):
+        for hidden in ("Aetna", "Explanation", "United", "Hertz", "lunch?", "spotify.com", "Verizon"):
             self.assertNotIn(hidden, tg)
         self.assertIn("email", tg.lower())               # points to the full version
 
@@ -207,6 +220,27 @@ class Tests(unittest.TestCase):
         self.assertIn("Fairwinds", email)                     # statement with no due date: email only
         self.assertNotIn("Fairwinds", tg)
 
+    def test_calendar_choices(self):
+        out = self.run_out(FakeGoogle(MAIN))
+        email, tg = out.split("--- telegram preview ---")
+        self.assertIn("Kazim bday party (Narjis)", email)                    # partner's events are tagged
+        self.assertRegex(email, r"overlaps|collision|two places|clash")      # Dentist 3:00-4:00 vs party 3:30-5:00
+        for gone in ("Tri valley", "Fajr", "Enrollment"):                    # Zaheer / Prayer calendars and enrollment notices are dropped
+            self.assertNotIn(gone, out)
+        self.assertIn("Mon 11/2 · Midterm Exam (ML)", email)                 # exams are their own list...
+        self.assertIn("Midterm Exam", tg)                                    # ...and Telegram shows them too
+
+    def test_mail_choices(self):
+        out = self.run_out(FakeGoogle(MAIN))
+        email, tg = out.split("--- telegram preview ---")
+        for muted in ("Fidelity", "Amazon", "$3,628.15", "Final Notice"):
+            self.assertNotIn(muted, out)
+        self.assertIn("spotify.com: [Action needed] Update your login by December 7th (by Mon 12/7)", email)
+        self.assertIn("Rent (Essex): Your Document is Ready to Sign", email)         # housing notice -> life admin
+        self.assertIn("Hertz: Zaki, thanks for booking!", email)              # rental cars -> travel
+        for emailonly in ("spotify.com", "Document is Ready", "Hertz", "Verizon"):
+            self.assertNotIn(emailonly, tg)
+
     def test_paid_settles_due(self):
         paid = msg("c9", "noreplyalerts@chase.com", "We've received your Sample Visa payment", day=28)
         self.assertNotIn("$40.00", self.run_text(FakeGoogle(MAIN + [paid])))
@@ -228,7 +262,7 @@ class Tests(unittest.TestCase):
         bm.load_config = lambda path=None: cfg
         text = self.run_text({"main": FakeGoogle(MAIN), "other": FakeGoogle(OTHER)})
         self.assertIn("OVERDUE", text.upper())
-        self.assertEqual(text.count("Dentist"), 1)               # same calendar in two logins -> once
+        self.assertEqual(text.count("3:00pm · Dentist"), 1)      # same calendar in two logins -> once
         text = self.run_text({"main": FakeGoogle(MAIN), "other": None})
         self.assertIn("Account problem, other", text)
         self.assertIn("Dentist", text)                           # healthy account still reported
@@ -300,7 +334,7 @@ class Tests(unittest.TestCase):
 
     def test_explain_shows_where_every_input_went(self):
         out = self.run_out(FakeGoogle(MAIN), extra=["--explain"])
-        for token in ("where every input went", "dropped by rule: Chase offers", "[matched: Chase/due]", "Prayer times"):
+        for token in ("where every input went", "dropped by rule: Chase offers", "[matched: Chase/due]", "Travel"):
             self.assertIn(token, out)
 
     def test_telegram_chunking_and_escape(self):

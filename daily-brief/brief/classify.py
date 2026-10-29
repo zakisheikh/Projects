@@ -110,3 +110,22 @@ def extract_due(text, ref: date):
     except (ValueError, IndexError):
         pass
     return None
+
+
+BY = re.compile(r"(?i)\b(?:by|before|until|deadline)\b[^.\n]{0,25}?\b([a-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?")
+
+
+def extract_deadline(text, ref: date):
+    """'update your login by December 7th' -> that date. For 'action needed' mail."""
+    for m in BY.finditer(text):
+        mo = _month(m.group(1))
+        if not mo:
+            continue
+        try:
+            out = date(int(m.group(3)) if m.group(3) else ref.year, mo, int(m.group(2)))
+        except ValueError:
+            continue
+        if not m.group(3) and (ref - out).days > 180:
+            out = out.replace(year=out.year + 1)
+        return out
+    return None

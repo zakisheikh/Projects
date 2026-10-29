@@ -44,14 +44,21 @@ def collect_events(g, cfg, tz, start, end):
     skip, hw_cals = set(cal_cfg["exclude_calendars"]), set(cal_cfg.get("homework_calendars", []))
     compact = set(cal_cfg.get("compact_calendars", []))
     tag_hw = cal_cfg.get("course_tag_is_homework", True)
+    drop_re = re.compile(cal_cfg.get("homework_exclude_pattern", r"(?!x)x"))
+    exam_re = re.compile(cal_cfg.get("exam_pattern", r"(?!x)x"))
     out = []
     for cal in g.calendars():
         name = cal.get("summaryOverride") or cal.get("summary", "")
         if name in skip or not cal.get("selected", True):
             continue
         for raw in g.events(cal["id"], start, end):
-            if raw.get("status") != "cancelled":
-                out.append(parse_event(raw, name, tz, hw, name in hw_cals, name in compact, tag_hw))
+            if raw.get("status") == "cancelled":
+                continue
+            e = parse_event(raw, name, tz, hw, name in hw_cals, name in compact, tag_hw)
+            if e.homework and drop_re.search(e.title):
+                continue                                  # e.g. enrollment / advising notices: you chose not to hear about them
+            e.exam = e.homework and bool(exam_re.search(e.title))
+            out.append(e)
     return out
 
 
@@ -71,8 +78,8 @@ def enrich(g, mid, tz, account, rules, n_sender, billers):
         m.amount = classify.extract_amount(text)
         m.due = classify.extract_due(text, m.when.date())
         m.note = classify.extract_autopay(text) or ""
-    if m.event == "balance":
-        m.amount = classify.first_amount(m.subject + " " + m.snippet)
+    if "action" in m.categories and not m.ignored:
+        m.due = classify.extract_deadline(f"{m.subject} {m.snippet}", m.when.date())
     return m
 
 
@@ -116,6 +123,7 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, trace=None):
     tomorrow = today + timedelta(days=1)
     horizon = today + timedelta(days=cfg["calendar"]["lookahead_days"])
     soon = today + timedelta(days=cfg["bills"]["due_soon_days"])
+    end = today + timedelta(days=cfg["bills"].get("window_days", 14))
 
     by_key, uniq = {}, []
     for e in sorted(events, key=lambda e: (e.start, e.title)):   # same event in several calendars/logins -> once
@@ -123,8 +131,8 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, trace=None):
         if key in by_key:
             k = by_key[key]
             k.homework |= e.homework
-            k.course, k.hint = k.course or e.course, k.hint or e.hint
-            k.compact &= e.compact
+            k.exam |= e.exam
+            k.course, k.hint, k.creator = k.course or e.course, k.hint or e.hint, k.creator or e.creator
         else:
             by_key[key] = e
             uniq.append(e)
@@ -134,7 +142,7 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, trace=None):
 
     notice_re = re.compile(cfg["calendar"].get("notice_pattern", r"(?!x)x"))
 
-    def is_notice(e):   # Canvas items that are not assignments: polls, advising/enrollment notices, timed announcements
+    def is_notice(e):   # Canvas items that are not assignments: polls, announcements, timed class events
         return e.homework and (not e.all_day or bool(notice_re.search(e.title)))
 
     # Each brief covers the stretch up to the next check: morning -> until midday, midday -> the rest of the day.
@@ -149,15 +157,16 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, trace=None):
             return first_slot            # all-day items are announced once, in the first brief
         return e.end > now and (window_end is None or e.start < window_end)
 
-    live = [e for e in uniq if in_window(e)]
     b = Bundle()
-    b.today = [e for e in live if not e.compact and not e.homework]
-    b.prayer = [e for e in live if e.compact and not e.all_day]
-    b.tomorrow = [e for e in uniq if on(e, tomorrow) and not e.compact and not e.homework]
-    hw = [e for e in uniq if e.homework and not is_notice(e) and today <= e.start.date() <= horizon]
-    notices = [e for e in uniq if is_notice(e) and today <= e.start.date() <= horizon]
-    b.any_homework = bool(hw or notices)
-    b.hw_week = hw
+    b.today = [e for e in uniq if in_window(e) and not e.homework]
+    timed = sorted((e for e in b.today if not e.all_day), key=lambda e: e.start)
+    b.overlaps = [(x, y) for i, x in enumerate(timed) for y in timed[i + 1:] if y.start < x.end]
+    work = [e for e in uniq if e.homework and today <= e.start.date() <= horizon]
+    notices = [e for e in work if is_notice(e)]
+    assignments = [e for e in work if not is_notice(e)]
+    b.exams = [e for e in assignments if e.exam]
+    b.hw_week = [e for e in assignments if not e.exam]
+    b.any_homework = bool(work)
     b.notice_urgent = [e for e in notices if e.hint and e.start.date() <= tomorrow]
     b.notices_later = [e for e in notices if e not in b.notice_urgent]
 
@@ -166,19 +175,16 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, trace=None):
     route = {}   # (account, id) -> where the mail went, for --explain
 
     def is_alert(m):
-        return m.event == "alert" or "security" in m.categories or bool(m.categories and ALERT_WORDS.search(m.subject))
+        return m.event == "alert" or bool(m.categories and ALERT_WORDS.search(m.subject))
 
     dues = sorted(open_bills, key=lambda m: m.due)
     b.failures = failures
-    end = today + timedelta(days=cfg["bills"].get("window_days", 14))
     b.dues_urgent = [m for m in dues if m.due <= soon]
     b.dues_later = [m for m in dues if soon < m.due <= end]      # beyond the window: not mentioned until it gets closer
     for m in dues:
-        if m.due > end:
-            route[(m.account, m.id)] = f"hidden until within {cfg['bills'].get('window_days', 14)} days of its due date"
+        route[(m.account, m.id)] = ("Priority (payment due soon)" if m.due <= soon else "Later payments" if m.due <= end
+                                    else f"hidden until within {cfg['bills'].get('window_days', 14)} days of its due date")
     b.alerts = [m for m in mails if is_alert(m)]
-    for m in dues:
-        route[(m.account, m.id)] = "Priority (payment due soon)" if m.due <= soon else "Later payments"
     for m in b.alerts:
         route[(m.account, m.id)] = "Priority (alert)"
     shown = set(route)
@@ -190,48 +196,43 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, trace=None):
             route[(m.account, m.id)] = section
         return items
 
-    b.health = take(lambda m: m.kind == "health" or "health" in m.categories, "Health")
     paid_notices = [m for m in mails if m.event == "paid"]
 
     def settled(m):   # a payment notice from the same biller arrived after this bill
         return any(p.biller == m.biller and p.account == m.account and p.when >= m.when for p in paid_notices)
 
+    b.health = take(lambda m: m.kind == "health" or "health" in m.categories, "Health")
     candidates = take(lambda m: m.event in ("statement", "due") or ("bill" in m.categories) or ("card" in m.categories), "New bills & statements")
-    for m in candidates:
-        if m.biller and settled(m):
-            route[(m.account, m.id)] = "settled by a later payment notice"
     open_cands = [m for m in candidates if not (m.biller and settled(m))]
+    for m in candidates:
+        if m not in open_cands:
+            route[(m.account, m.id)] = "settled by a later payment notice"
     b.bills = [m for m in open_cands if m.due and m.due <= end]
     b.statements = [m for m in open_cands if not m.due]
     for m in open_cands:
         if m.due and m.due > end:
             route[(m.account, m.id)] = "hidden until closer to its due date"
     b.paid = take(lambda m: m.event == "paid", "Payments confirmed")
-    latest = {}
-    for m in take(lambda m: m.event == "balance", "Balances (latest only)"):
-        k = (m.account, m.biller)
-        if k not in latest or m.when > latest[k].when:
-            latest[k] = m
-    b.balances = list(latest.values())
-    b.receipts = take(lambda m: m.event == "receipt" or "receipt" in m.categories, "Receipts (counted)")
-    b.school = take(lambda m: "school" in m.categories, "School mail")
-    b.logistics = take(lambda m: "logistics" in m.categories, "Deliveries & travel")
-    b.info = take(lambda m: m.event == "info", "Other account notices")
-    b.important = take(lambda m: m.important and m.unread, "Other important mail")
+    b.travel = take(lambda m: m.event == "travel" or "logistics" in m.categories, "Travel")
+    b.admin = take(lambda m: m.event == "admin" or {"government", "community"} & set(m.categories), "Life admin")
+    b.renewals = take(lambda m: "renewal" in m.categories, "Subscriptions & renewals")
+    acts = take(lambda m: "action" in m.categories, "Action needed")
+    b.action_urgent = [m for m in acts if m.due and m.due <= soon]
+    b.action = [m for m in acts if m not in b.action_urgent]
+    b.other = take(lambda m: "receipt" not in m.categories and m.event not in ("receipt", "balance"), "Other mail")
 
     if trace is not None:
         for e in uniq:
-            where = ("Prayer times" if e in b.prayer else "This brief's schedule" if e in b.today else "Tomorrow" if e in b.tomorrow else
+            where = ("This brief's schedule" if e in b.today else "Exams & presentations" if e in b.exams else
                      "Coursework this week" if e in b.hw_week else "Priority (class notice)" if e in b.notice_urgent else
-                     "Later class notices" if e in b.notices_later else
-                     "not shown (over, or belongs to the other brief)")
+                     "Class notices" if e in b.notices_later else "not shown (over, or belongs to the other brief)")
             trace.append(("school" if e.homework else "cal", e.calendar, e.title.strip()[:60], where))
         for m in dropped:
             trace.append(("mail", f"{m.account}: {render.sender_name(m)[:28]}", m.subject[:60], f"dropped by rule: {m.biller} -> ignore"))
         for m in mails:
             how = f"{m.biller}/{m.event}" if m.biller else (",".join(m.categories) or "no rule")
             trace.append(("mail", f"{m.account}: {render.sender_name(m)[:28]}", m.subject[:60],
-                          f"{route.get((m.account, m.id), 'not shown (no section wanted it)')}   [matched: {how}]"))
+                          f"{route.get((m.account, m.id), 'not shown (muted by your choices)')}   [matched: {how}]"))
     return b
 
 
@@ -302,9 +303,9 @@ def run(argv=None, google=None, now=None):
 
     def speak(compact):   # two tellings of the same day: a short one for Telegram, the full one for email
         v = Voice.load(pcfg.get("name", "Bruno"), pcfg.get("user", ""), seed, st.get("phrases"), address=pcfg.get("address", "sir"))
-        nar = Narrator(v, aliases, now.date(), cfg["delivery"].get("telegram_redact_health", True) if compact else False, compact,
+        nar = Narrator(v, aliases, now.date(), compact,
                        {"priority": bcfg.get("telegram_max_priority", 3), "events": bcfg.get("telegram_max_events", 6)},
-                       show_tomorrow=bcfg.get("noon_tomorrow", False))
+                       partner=(cfg["calendar"].get("partner_emails", []), cfg["calendar"].get("partner_label", "")))
         return nar.paragraphs(bundle, slot, now), v
 
     full, voice = speak(False)

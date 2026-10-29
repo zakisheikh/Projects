@@ -15,6 +15,8 @@ class Event:
     compact: bool = False
     course: str = ""
     hint: str = ""
+    creator: str = ""
+    exam: bool = False
 
 
 @dataclass
