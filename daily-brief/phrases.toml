@@ -1,33 +1,62 @@
-# Bruno's voice: dry, courteous, a little Jarvis. Plain text templates, picked pseudo-randomly (seeded by
-# date + slot) and never the same one twice in a row. No AI involved.
-# Placeholders: {sir} = how he addresses you (persona.address), {name} = your first name, {bot} = his name.
-# Add or edit lines freely; every list needs at least 2 entries.
+# Bruno's voice. Everything he says comes from here: plain templates, no AI.
+# Each key is a bank of interchangeable lines. One is picked pseudo-randomly (seeded by date + slot), and never
+# the same one as last time. Add as many lines as you like to any bank (minimum 2).
+# Placeholders: {sir} how he addresses you, {name} your first name, {bot} his name, plus per-bank fields
+# such as {items}, {when}, {who}, {amount}, {n}.
 
+# ---------------------------------------------------------------- greetings
 greet_morning = [
-  "Good morning, {sir}. I have reviewed your calendar and your correspondence. The situation follows.",
-  "Good morning, {sir}. {bot} at your service. Today's briefing is ready.",
-  "Good morning, {sir}. I trust you slept well. Here is where matters stand.",
-  "Welcome to the day, {sir}. I've taken the liberty of going through everything overnight.",
-  "Good morning, {sir}. All systems are nominal, and a few items deserve your attention.",
-  "Good morning, {sir}. The overnight review is complete.",
-  "Rise and shine, {sir}. I've assembled the day for you.",
+  "Good morning, {sir}. I've been through your calendar and your correspondence. Here is where matters stand.",
+  "Good morning, {sir}. {bot} at your service, with the morning's briefing.",
+  "Good morning, {sir}. I trust you slept well. I've taken the liberty of reviewing everything overnight.",
+  "Rise and shine, {sir}. The day has been assembled for your approval.",
+  "Good morning, {sir}. All systems nominal. A few things to go over.",
+  "Morning, {sir}. The overnight review is complete, and I have a few notes.",
+  "Welcome back to the land of the living, {sir}. Shall we?",
+  "Good morning, {sir}. Coffee first, perhaps. Then this.",
+  "Good morning, {sir}. I've sorted the wheat from the chaff, so you don't have to.",
+  "Ah, there you are, {sir}. Good morning. I have the rundown.",
+  "Good morning, {sir}. Another day, another set of obligations. Let me walk you through them.",
+  "Top of the morning, {sir}. I've prepared your briefing.",
 ]
 greet_noon = [
   "Good afternoon, {sir}. A midday status report.",
-  "{sir}, the midday update. I'll keep it brief.",
-  "Good afternoon, {sir}. {bot} here, with the state of play.",
-  "Midday, {sir}. Here is what remains of the day.",
+  "Midday, {sir}. I'll keep it brief.",
+  "Good afternoon, {sir}. {bot} here with the state of play.",
+  "Halfway through the day, {sir}. Here is what has changed.",
   "A brief interruption, {sir}, with the afternoon's particulars.",
   "Good afternoon, {sir}. I've reviewed what arrived since this morning.",
   "Noon report, {sir}. Nothing has escaped my notice.",
+  "Afternoon, {sir}. I trust the morning treated you well. An update.",
+  "Pardon the interruption, {sir}. The midday briefing.",
+  "{sir}, a quick word on where the day stands.",
+  "Lunchtime, {sir}. Allow me to bring you up to date.",
+  "Good afternoon, {sir}. I've been keeping watch. Here is what I have.",
 ]
-attention_intro = [
-  "I would suggest attending to these first:",
-  "These warrant your immediate attention, {sir}:",
-  "Priority matters:",
-  "If I may, these cannot wait:",
-  "Several items require action, {sir}:",
+
+# day-of-week asides (0 = Monday ... 6 = Sunday), used now and then right after the greeting
+dow_0 = ["It's Monday, {sir}. The week awaits.", "Monday again, {sir}. I'll try to make it painless.", "A fresh week, {sir}. Let's begin as we mean to go on."]
+dow_1 = ["Tuesday, {sir}. The week has found its rhythm.", "It's Tuesday. Not the worst day to be productive, {sir}."]
+dow_2 = ["Midweek, {sir}. The hump, as they say.", "Wednesday, {sir}. Over the hill, or at least on top of it."]
+dow_3 = ["Thursday, {sir}. The weekend is within sight.", "Thursday. Nearly there, {sir}."]
+dow_4 = ["It's Friday, {sir}. The finish line is in view.", "Friday, {sir}. Do try to finish strong.", "Friday at last, {sir}."]
+dow_5 = ["It's Saturday, {sir}. I'll go easy on you.", "Saturday, {sir}. Whatever pace you like."]
+dow_6 = ["Sunday, {sir}. A good day to get ahead of the week.", "It's Sunday. I'll keep things civilised, {sir}."]
+
+# ---------------------------------------------------------------- priority items
+priority_open = [
+  "First, the matters that can't wait.",
+  "I would suggest attending to these first.",
+  "A few things require action, {sir}.",
   "Before anything else, {sir}:",
+  "Let's start with what's pressing.",
+  "These warrant your immediate attention.",
+  "If I may, a few items want you sooner rather than later.",
+  "Some things won't keep, {sir}.",
+  "Priorities first, {sir}.",
+  "Allow me to flag the urgent ones.",
+  "There are items that need you today, {sir}.",
+  "On the pressing side:",
 ]
 all_clear = [
   "Nothing requires your immediate attention, {sir}.",
@@ -36,82 +65,217 @@ all_clear = [
   "No urgent matters. You may proceed at your leisure.",
   "The situation is calm, {sir}.",
   "Nothing is pressing. I shall let you know if that changes.",
+  "Nothing on fire, {sir}, which is exactly how I like it.",
+  "Not a single urgent thing. Savour it.",
+  "The decks are clear, {sir}.",
+  "No emergencies today. Remarkable.",
 ]
-today_intro = [
-  "The remainder of your schedule:",
-  "Still ahead today:",
-  "Your remaining engagements, {sir}:",
-  "For the rest of the day:",
-  "On the calendar from here:",
-  "What remains of today:",
+hw_urgent = [
+  "{item} is due {when}{hint}.",
+  "Your assignment, {item}, is due {when}{hint}.",
+  "Don't let {item} slip past you. It's due {when}{hint}.",
+  "{item}: due {when}{hint}.",
+  "Coursework alert, {sir}. {item} is due {when}{hint}.",
+  "{item} comes due {when}{hint}.",
+  "Mind the clock on {item}. It's due {when}{hint}.",
+  "I'd get to {item} soon, {sir}. Due {when}{hint}.",
 ]
-today_empty = [
+notice_urgent = [
+  "{item} wants a response {when}{hint}.",
+  "Not an assignment, but {item} needs an answer {when}{hint}.",
+  "A class matter: {item}, closing {when}{hint}.",
+  "{item} closes {when}{hint}. Easy to forget.",
+  "Keep an eye on {item}. It closes {when}{hint}.",
+]
+bill_due_amt = [
+  "{who} is expecting {amount} by {when}{auto}.",
+  "{amount} goes to {who} {when}{auto}.",
+  "{who}: {amount}, due {when}{auto}.",
+  "Don't let {who}'s {amount} slip past {when}{auto}.",
+  "Payment of {amount} to {who} falls due {when}{auto}.",
+  "{who} would like {amount} by {when}{auto}.",
+  "The {who} bill, {amount}, is due {when}{auto}.",
+  "Do remember {who}, {sir}. {amount}, due {when}{auto}.",
+]
+bill_due_noamt = [
+  "{who} has a payment due {when}{auto}.",
+  "A {who} payment falls due {when}{auto}.",
+  "{who} will be wanting settlement {when}{auto}.",
+  "Mind the {who} payment, due {when}{auto}.",
+  "{who}: something is due {when}{auto}. No amount in the notice.",
+]
+bill_late = [
+  "{who} was due {when}{amount_part}. I have no record of payment.",
+  "{who}{amount_part} is past due, {sir}. It was due {when}.",
+  "Overdue, I'm afraid: {who}{amount_part}, due {when}.",
+]
+autopay_off = [", and autopay is off", " (autopay is off, so it's on you)", ", with autopay switched off"]
+autopay_on = [", though autopay should cover it", " (autopay is on)"]
+alert_item = [
+  "{who} flagged something: \"{subject}\".",
+  "Something from {who} caught my eye: \"{subject}\".",
+  "{who} sent this, and I thought you'd want to see it: \"{subject}\".",
+  "A flag from {who}: \"{subject}\".",
+  "{who} says: \"{subject}\". Worth a look.",
+  "I don't love the sound of this one from {who}: \"{subject}\".",
+]
+account_fault = [
+  "I couldn't get into the {account} account ({why}), so it is missing from this report.",
+  "A fault with the {account} account, {sir}: {why}. Its mail and calendar are not included.",
+  "The {account} account is giving me trouble ({why}). I'll keep trying.",
+]
+
+# ---------------------------------------------------------------- schedule
+schedule_open = [
+  "On the calendar from here: {items}.",
+  "Your day, from here: {items}.",
+  "Today holds {items}.",
+  "What remains of your schedule: {items}.",
+  "As for the rest of today, you have {items}.",
+  "Looking at the calendar, I see {items}.",
+  "Your remaining engagements, {sir}: {items}.",
+  "The rest of the day goes like this: {items}.",
+]
+schedule_empty = [
   "Your calendar is clear for the remainder of the day, {sir}.",
   "No further engagements today.",
   "The rest of the day is entirely your own.",
   "Nothing more is scheduled today.",
-  "Your afternoon is, for the moment, unclaimed.",
+  "Your calendar is empty from here on. Use it wisely.",
+  "Nothing on the books for the rest of today, {sir}.",
 ]
-tomorrow_intro = [
-  "A preview of tomorrow:",
-  "Looking ahead to tomorrow, {sir}:",
-  "Tomorrow's schedule, for planning purposes:",
-  "So that tomorrow holds no surprises:",
-  "Tomorrow, in brief:",
+quip_busy = [
+  "A full day, {sir}.",
+  "Busy one. I'll try to keep the interruptions to a minimum.",
+  "You have your work cut out for you.",
+  "It's a packed schedule, {sir}. Pace yourself.",
 ]
-homework_intro = [
-  "Coursework on the horizon:",
-  "Academic deadlines, {sir}:",
-  "Assignments to keep in view:",
-  "Your coursework, in order of urgency:",
-  "Submissions approaching:",
-  "On the academic front:",
+quip_light = [
+  "A light day, {sir}.",
+  "Mercifully quiet.",
+  "Plenty of breathing room today.",
 ]
-notices_intro = [
-  "Course announcements, not assignments:",
-  "Notices from your classes, {sir}:",
-  "Administrative matters from your courses:",
-  "Class business worth a glance:",
+prayer_line = [
+  "For prayer, {items}.",
+  "Prayer times: {items}.",
+  "And for prayer today, {items}.",
+  "Your prayer times: {items}.",
+]
+tomorrow_open = [
+  "Looking ahead to tomorrow: {items}.",
+  "Tomorrow, you have {items}.",
+  "A glance at tomorrow, {sir}: {items}.",
+  "So that tomorrow holds no surprises: {items}.",
+  "Tomorrow's agenda: {items}.",
+]
+
+# ---------------------------------------------------------------- coursework
+homework_open = [
+  "Coming up this week on the coursework front: {items}.",
+  "Further out, you have {items}.",
+  "Academically speaking, {items}.",
+  "On the horizon for school: {items}.",
+  "Keep these in view: {items}.",
+  "Later this week: {items}.",
 ]
 homework_none = [
   "No assignments are due this week, {sir}.",
   "Coursework is clear for now.",
-  "Nothing due on the academic front.",
+  "Nothing due on the academic front. Enjoy it.",
   "No coursework deadlines are approaching.",
 ]
-dues_intro = [
-  "Outstanding payments, {sir}:",
-  "Bills awaiting settlement:",
-  "On the ledger:",
-  "Payments to be made:",
-  "Obligations coming due:",
-  "Financial matters pending:",
+notices_open = [
+  "A few class announcements, not assignments: {items}.",
+  "From your classes, {sir}: {items}.",
+  "Course administration worth a glance: {items}.",
+  "Some class business: {items}.",
 ]
-bills_intro = [
-  "New bills and statements:",
-  "Fresh arrivals in the billing department:",
-  "Statements received:",
-  "Newly arrived, billing-wise:",
+
+# ---------------------------------------------------------------- money
+transition_money = [
+  "Now, the bills.",
+  "Turning to money.",
+  "On to the finances.",
+  "As for the ledger:",
+  "A word on money.",
+  "Financially speaking:",
 ]
-paid_intro = [
-  "Payments confirmed:",
-  "Settled, {sir}:",
-  "Transactions that cleared:",
-  "For the record, these have been paid:",
+dues_open = [
+  "Still outstanding: {items}.",
+  "Further payments on the horizon: {items}.",
+  "Also on the ledger: {items}.",
+  "Coming due later: {items}.",
+  "Pending obligations, {sir}: {items}.",
 ]
-health_intro = [
-  "Medical correspondence:",
-  "On the health front, {sir}:",
-  "Health paperwork:",
-  "Medical matters:",
+bills_open = [
+  "New in the billing inbox: {items}.",
+  "Fresh statements have arrived: {items}.",
+  "Newly arrived, billing-wise: {items}.",
+  "I've received the following statements: {items}.",
 ]
-mail_intro = [
-  "Correspondence worth your time:",
-  "From the inbox, {sir}:",
-  "Messages I thought you would want to see:",
-  "Mail of note:",
-  "In your inbox:",
+paid_open = [
+  "On the bright side, these payments cleared: {items}.",
+  "For the record, these are settled: {items}.",
+  "Confirmed paid: {items}.",
+  "Good news, {sir}. The following went through: {items}.",
 ]
+balance_line = [
+  "For reference, {items}.",
+  "Your balances stand at {items}.",
+  "Quick check of the balances: {items}.",
+  "On the balance front, {items}.",
+]
+receipts_line = [
+  "{n} receipts came in, from {sources}. Filed and forgotten.",
+  "I've noted {n} receipts ({sources}); nothing for you to do.",
+  "{n} receipts from {sources}, all accounted for.",
+]
+receipt_one = [
+  "One receipt came in, from {sources}. Nothing for you to do.",
+  "A receipt from {sources} has arrived. Filed.",
+]
+
+# ---------------------------------------------------------------- mail
+transition_mail = [
+  "Now, the inbox.",
+  "As for correspondence:",
+  "Turning to mail.",
+  "On to the inbox.",
+  "A word on your mail:",
+]
+health_redacted = [
+  "There's medical correspondence waiting: {thing}. The details are in your email.",
+  "I have {thing} for you. I'll keep the specifics for your email.",
+  "Health paperwork: {thing}. Details by email, for discretion's sake.",
+]
+health_open = [
+  "On the health front: {items}.",
+  "Medical correspondence has arrived: {items}.",
+  "Health paperwork, {sir}: {items}.",
+]
+school_open = [
+  "From your schools: {items}.",
+  "School mail worth a look: {items}.",
+]
+logistics_open = [
+  "On the travel and delivery front: {items}.",
+  "Logistics, {sir}: {items}.",
+  "Regarding your travels and deliveries: {items}.",
+]
+info_open = [
+  "A few account notices: {items}.",
+  "Some account housekeeping: {items}.",
+]
+mail_open = [
+  "Mail I thought you'd want to see: {items}.",
+  "Worth opening: {items}.",
+  "Messages of note: {items}.",
+  "Among the rest of the inbox: {items}.",
+  "You may want to read: {items}.",
+]
+more_items = ["and {k} more", "plus {k} others", "and {k} besides"]
+
+# ---------------------------------------------------------------- sign-offs
 closing_morning = [
   "I shall continue monitoring, {sir}. Another report at noon.",
   "That concludes the briefing. Do let me know if you require anything.",
@@ -119,6 +283,10 @@ closing_morning = [
   "I'll be here should you need me, {sir}.",
   "Shall I check back at midday? I rather think I will.",
   "At your service, as ever. Good luck today, {sir}.",
+  "Off you go, then. I'll keep the home fires burning.",
+  "I'll hold the fort, {sir}. Go and conquer something.",
+  "That's all for now. I'll be watching the inbox.",
+  "Do try to enjoy the day, {sir}. I'll handle the paperwork.",
 ]
 closing_noon = [
   "That concludes the update, {sir}. I'll keep watch until morning.",
@@ -127,4 +295,28 @@ closing_noon = [
   "I shall continue to monitor. Carry on, {sir}.",
   "Good day, {sir}. I'll have the next report in the morning.",
   "The rest of the day is in your capable hands.",
+  "Back to it, then, {sir}. I'll be here.",
+  "I'll leave you to it. Shout if you need me.",
+  "That's the picture for now. Finish strong, {sir}.",
+  "I'll keep an eye on things. You keep an eye on the clock.",
+]
+
+# ---------------------------------------------------------------- short (Telegram) version
+see_email = [
+  "The rest is in your email, {sir}.",
+  "I've left the finer detail for your email.",
+  "Everything else is waiting in your email.",
+  "Full particulars are in your email.",
+  "Your email has the complete picture.",
+]
+more_priority = ["{k} more in your email.", "and {k} more besides, in your email.", "{k} further items are in your email."]
+count_homework = ["Also later this week: {thing}.", "Further out, {thing}.", "On the horizon: {thing}."]
+count_dues = ["Also on the ledger: {thing}.", "Further out, {thing}.", "Coming up after that: {thing}."]
+count_mail = ["In your inbox: {thing} worth a look.", "I've set aside {thing} for you.", "{thing} may deserve your attention."]
+also_line = [
+  "Beyond that: {items}.",
+  "Also on my radar: {items}.",
+  "In the background, I'm tracking {items}.",
+  "And for completeness: {items}.",
+  "Lesser matters: {items}.",
 ]

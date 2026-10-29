@@ -39,11 +39,6 @@ def send(token, chat_id, html_text):
             raise RuntimeError(f"telegram {e.code}: {e.read().decode()[:200]}") from None
 
 
-def fmt(greeting, blocks, closing):
-    """blocks: list of (title, lead, [lines]) -> Telegram HTML."""
-    parts = [escape(greeting)]
-    for title, lead, lines in blocks:
-        head = f"<b>{escape(title)}</b>" + (f"\n<i>{escape(lead)}</i>" if lead else "")
-        parts.append(head + ("\n" + "\n".join(f"• {escape(l)}" for l in lines) if lines else ""))
-    parts.append(f"<i>{escape(closing)}</i>")
-    return "\n\n".join(parts)
+def fmt(paragraphs):
+    """Telegram HTML: plain spoken paragraphs, nothing fancy."""
+    return "\n\n".join(escape(p) for p in paragraphs)

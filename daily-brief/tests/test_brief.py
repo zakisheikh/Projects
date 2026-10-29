@@ -120,6 +120,16 @@ class Tests(unittest.TestCase):
         import brief.main as bm
         bm.load_config = self._orig_cfg
 
+    def run_out(self, google, now=NOW, extra=()):
+        import io, contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            run(["--force", "--dry-run", *extra], google=google, now=now)
+        return buf.getvalue()
+
+    def run_text(self, google, now=NOW):
+        return self.run_out(google, now).split("--- telegram preview ---")[0]
+
     def test_slots(self):
         d = lambda h, m=0: datetime(2026, 10, 29, h, m, tzinfo=TZ)
         self.assertEqual(pick_slot(d(7, 20), [7, 12]), 7)
@@ -139,121 +149,81 @@ class Tests(unittest.TestCase):
         self.assertEqual(classify.extract_autopay("Autopay Off"), "autopay OFF")
         self.assertEqual(classify.extract_autopay("Bill Due - NON auto pay"), "autopay OFF")
 
-    def run_text(self, google):
-        import io, contextlib
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
-            run(["--force", "--dry-run"], google=google, now=NOW)
-        return buf.getvalue().split("--- telegram preview ---")[0]
-
-    def test_single_account(self):
+    def test_full_email_version(self):
         text = self.run_text(FakeGoogle(MAIN))
-        self.assertIn("Dentist @ Main St", text)
-        self.assertNotIn("Standup", text)                       # already over
-        self.assertNotIn("Full moon", text)                     # excluded calendar
-        self.assertIn("Prayer Times".upper(), text.upper())
-        self.assertIn("Zuhr 12:32pm", text)                     # compact one-liner
-        self.assertNotIn("Fajr", text)                          # already passed
-        self.assertEqual(text.count("Final Project: Proposal"), 1)   # Canvas copy in two calendars -> once
-        self.assertIn("(ML)", text)                             # course alias
-        self.assertIn("by 7:00 PM", text)                       # deadline hint from description
-        self.assertIn("Databases", text)
-        self.assertIn("Notice: Fri 10/30 · Quick Poll", text)   # poll with a deadline is flagged, but not as homework
-        self.assertNotIn("Coursework due: Fri 10/30 · Quick Poll", text)
-        self.assertIn("Coursework due:", text)
-        self.assertIn("Payment due: Chase", text)                       # unpaid, due in 3 days
-        self.assertIn("$40.00", text)
-        self.assertIn("autopay OFF", text)
-        self.assertIn("Alert: Chase: Unusual activity", text)
-        self.assertIn("Rent", text)
-        self.assertIn("$144.18", text)                          # Conservice total
-        self.assertIn("Verizon", text)
-        self.assertIn("$290.01", text)
-        self.assertNotIn("reward you", text)                    # marketing dropped
-        self.assertNotIn("missing out", text)
-        self.assertNotIn("Get reimbursed", text)
-        self.assertIn("Explanation of Benefits", text)
-        self.assertIn("2 receipt(s)", text)
-        self.assertIn("Chase: $3,628.15 (latest)", text)        # only newest balance
-        self.assertNotIn("$2,900.26", text)
-        self.assertIn("lunch?", text)
+        for must in ("Dentist at 3 PM", "Zuhr at 12:32 PM", "for ML", "7:00 PM", "Databases", "Quick Poll", "$40.00", "autopay",
+                     "Unusual activity on your card", "$144.18", "Verizon", "$290.01", "Explanation of Benefits",
+                     "2 receipts", "$3,628.15", "lunch?", "Rent"):
+            self.assertIn(must, text, must)
+        for mustnt in ("Standup", "Full moon", "Fajr", "reward you", "missing out", "Get reimbursed", "$2,900.26"):
+            self.assertNotIn(mustnt, text, mustnt)
+        self.assertEqual(text.count("Final Project: Proposal"), 1)       # Canvas copy in two calendars -> once
+        for heading in ("PRIORITY ITEMS", "REMAINING SCHEDULE", "NEEDS ATTENTION", "HEALTH & MEDICAL"):
+            self.assertNotIn(heading, text.upper())                      # spoken prose, not a form
 
-    def test_style_plain_by_default_emoji_optional_and_explain(self):
-        import io, contextlib
-        import brief.main as bm
-        import brief.render as rd
+    def test_telegram_version_is_short(self):
+        out = self.run_out(FakeGoogle(MAIN))
+        tg = out.split("--- telegram preview ---")[1].strip()
+        self.assertLess(len(tg), 1400)
+        self.assertLessEqual(len(tg.split("\n\n")), 8)
+        self.assertIn("medical item", tg)               # health folded into one line
+        for hidden in ("Aetna", "Zuhr", "Explanation"):
+            self.assertNotIn(hidden, tg)
+        self.assertIn("email", tg.lower())               # points to the full version
 
-        def dry(emoji):
-            base = bm.load_config
-            cfg = base()
-            cfg["style"] = {"emoji": emoji}
-            bm.load_config = lambda path=None: cfg
-            buf = io.StringIO()
-            try:
-                with contextlib.redirect_stdout(buf):
-                    run(["--force", "--dry-run", "--explain"], google=FakeGoogle(MAIN), now=NOW)
-            finally:
-                bm.load_config = base
-                rd.USE_EMOJI = False
-            return buf.getvalue()
-
-        plain = dry(False)
-        self.assertFalse(any(e in plain for e in ("🚨", "📅", "💳", "✉️")))
-        self.assertIn("PRIORITY ITEMS", plain.upper())
-        self.assertIn("sir", plain)
-        self.assertIn("where every input went", plain)
-        self.assertIn("dropped by rule: Chase offers", plain)
-        self.assertIn("[matched: Chase/due]", plain)
-        self.assertIn("🚨", dry(True))
+    def test_paid_settles_due(self):
+        paid = msg("c9", "noreplyalerts@chase.com", "We've received your Sample Visa payment", day=28)
+        self.assertNotIn("$40.00", self.run_text(FakeGoogle(MAIN + [paid])))
 
     def test_stale_due_is_dropped_and_bare_sender_named(self):
-        old = msg("r0", "no-reply@essex.com", "Your Rent Payment is Due Soon", day=1,
-                  body="your rent is due today, October 1st.")
-        old["payload"]["headers"][2]["value"] = "Wed, 30 Sep 2026 09:00:00 -0700"
+        old = msg("r0", "no-reply@essex.com", "Your Rent Payment is Due Soon", day=1, body="your rent is due today, October 1st.")
         text = self.run_text(FakeGoogle(MAIN + [old]))
-        self.assertNotIn("Payment due: Rent: Your Rent Payment is Due Soon  [due Thu 10/1]", text)   # not in the unpaid ledger
+        for phrase in ("was due", "past due", "Overdue"):
+            self.assertNotIn(phrase, text)
         from brief.models import Mail
         from brief.render import sender_name
         self.assertEqual(sender_name(Mail("x", "TurboTax@em1.turbotax.intuit.com", "s", "", NOW)), "intuit.com")
         self.assertEqual(sender_name(Mail("x", "Prof <p@school.edu>", "s", "", NOW)), "Prof")
 
-    def test_paid_settles_due(self):
-        paid = msg("c9", "noreplyalerts@chase.com", "We've received your Sample Visa payment", day=28)
-        text = self.run_text(FakeGoogle(MAIN + [paid]))
-        self.assertNotIn("Payment due: Chase", text)
-
     def test_multi_account_and_failure_isolation(self):
         import brief.main as bm
         cfg = bm.load_config()
         cfg["accounts"] = [{"name": "main", "token_env": "X", "send_from": True}, {"name": "other", "token_env": "Y"}]
-        import tempfile, os, tomllib  # write tmp config
-        # emulate via direct build: accounts dict of fakes
-        g = {"main": FakeGoogle(MAIN), "other": FakeGoogle(OTHER)}
         bm.load_config = lambda path=None: cfg
-        try:
-            text = self.run_text(g)
-            self.assertIn("[other]", text)
-            self.assertIn("OVERDUE", text.upper())
-            self.assertEqual(text.count("Dentist"), 1)          # same calendar in two logins -> once
-            g2 = {"main": FakeGoogle(MAIN), "other": None}
-            text = self.run_text(g2)
-            self.assertIn("Account fault: other", text)
-            self.assertIn("Dentist", text)                      # healthy account still reported
-        finally:
-            pass
+        text = self.run_text({"main": FakeGoogle(MAIN), "other": FakeGoogle(OTHER)})
+        self.assertIn("OVERDUE", text.upper())
+        self.assertEqual(text.count("Dentist"), 1)               # same calendar in two logins -> once
+        text = self.run_text({"main": FakeGoogle(MAIN), "other": None})
+        self.assertIn("other account", text)
+        self.assertIn("Dentist", text)                           # healthy account still reported
 
     def test_voice_varies_and_never_repeats(self):
         from brief.voice import Voice
-        last = {}
-        seen = []
+        last, seen = {}, []
         for day in range(30):
             v = Voice.load("Bruno", "Zaki", f"2026-10-{day}-7", last)
             seen.append(v.say("greet_morning"))
             if day:
                 self.assertNotEqual(seen[-1], seen[-2])
             last.update(v.used)
-        self.assertGreater(len(set(seen)), 4)
-        self.assertTrue(all(x.strip() for x in seen))
+        self.assertGreater(len(set(seen)), 6)
+        self.assertTrue(all(x[0].isupper() for x in seen))
+
+    def test_a_month_of_briefs_never_repeat_back_to_back(self):
+        prev = None
+        last = {}
+        for day in range(1, 29):
+            import brief.main as bm
+            from brief.voice import Voice
+            from brief.narrate import Narrator
+            v = Voice.load("Bruno", "Zaki", f"2026-11-{day:02d}-7", last)
+            b = bm.assemble([], [], [], [], datetime(2026, 11, day, 7, 17, tzinfo=TZ), 7, bm.load_config())
+            out = Narrator(v, {}, date(2026, 11, day)).paragraphs(b, 7, datetime(2026, 11, day, 7, 17, tzinfo=TZ))
+            last.update(v.used)
+            if prev:
+                self.assertNotEqual(out[0], prev[0])             # greeting differs from yesterday's
+                self.assertNotEqual(out[-1], prev[-1])           # so does the sign-off
+            prev = out
 
     def test_state_and_delivery(self):
         import json, os, tempfile
@@ -272,33 +242,35 @@ class Tests(unittest.TestCase):
             FakeGoogle.sent = None
             self.assertEqual(run(["--force", "--state", path], google=g, now=NOW), 0)
             self.assertTrue(sent and FakeGoogle.sent)
-            self.assertIn("Details are in your email", sent[0])        # health redacted on Telegram
-            self.assertNotIn("Aetna", sent[0])
-            self.assertIn("Aetna", FakeGoogle.sent[2])                 # but present in the email
+            self.assertNotIn("Aetna", sent[0])                          # health stays off Telegram
+            self.assertIn("Aetna", FakeGoogle.sent[2])                  # but present in the email
             with open(path) as f:
                 st = json.load(f)
             self.assertIn("last_sent", st)
             self.assertTrue(st["seen"] and st["phrases"])
             self.assertIn("started 17m after slot", st["history"][-1])
-            # second run: already-reported mail is not repeated as new
             sent.clear()
             run(["--force", "--state", path], google=g, now=NOW.replace(minute=40))
-            self.assertNotIn("lunch?", FakeGoogle.sent[2])
-            # one channel failing must not block the other
-            def boom(*a): raise RuntimeError("down")
+            self.assertNotIn("lunch?", FakeGoogle.sent[2])              # already reported, not repeated
+
+            def boom(*a):
+                raise RuntimeError("down")
             tgm.send = boom
             FakeGoogle.sent = None
             self.assertEqual(run(["--force"], google=g, now=NOW), 0)
-            self.assertIn("telegram: down", FakeGoogle.sent[2])
+            self.assertIn("telegram: down", FakeGoogle.sent[2])         # one channel failing must not block the other
         finally:
             tgm.send, bm.load_config = orig_send, orig_load
 
+    def test_explain_shows_where_every_input_went(self):
+        out = self.run_out(FakeGoogle(MAIN), extra=["--explain"])
+        for token in ("where every input went", "dropped by rule: Chase offers", "[matched: Chase/due]", "Prayer times"):
+            self.assertIn(token, out)
+
     def test_telegram_chunking_and_escape(self):
         from brief import telegram as tgm
-        out = tgm.fmt("hi <b>", [("T", "lead & more", ["a < b"])], "bye")
-        self.assertIn("a &lt; b", out)
-        big = "\n\n".join(["x" * 1000] * 10)
-        parts = tgm.chunks(big)
+        self.assertIn("a &lt; b", tgm.fmt(["hi <b>", "a < b"]))
+        parts = tgm.chunks("\n\n".join(["x" * 1000] * 10))
         self.assertTrue(all(len(p) <= 3900 for p in parts) and len(parts) > 1)
 
     def test_off_slot_noop(self):

@@ -1,38 +1,5 @@
 from html import escape
 
-TITLES = {
-    "attention": "Priority items",
-    "today": "Remaining schedule",
-    "prayer": "Prayer times",
-    "tomorrow": "Tomorrow",
-    "homework": "Coursework later this week",
-    "notices": "Class notices",
-    "dues": "Outstanding payments",
-    "health": "Health & medical",
-    "bills": "New bills & statements",
-    "paid": "Payments confirmed",
-    "balances": "Card & bank balances",
-    "receipts": "Receipts",
-    "info": "Other account notices",
-    "school": "School mail",
-    "logistics": "Deliveries & travel",
-    "important": "Other important mail",
-}
-EMOJI = {"attention": "🚨", "today": "📅", "prayer": "🕌", "tomorrow": "🌅", "homework": "📚", "notices": "📢",
-         "dues": "💳", "health": "🏥", "bills": "📄", "paid": "✅", "balances": "🏦", "receipts": "🧾",
-         "info": "ℹ️", "school": "🎓", "logistics": "✈️", "important": "✉️",
-         "HOMEWORK": "📚", "NOTICE": "📢", "DUE": "💳", "ALERT": "⚠️", "ACCOUNT": "🔑"}
-USE_EMOJI = False   # set from [style] emoji in config.toml; off by default
-
-
-def icon(key):
-    return f"{EMOJI[key]} " if USE_EMOJI and key in EMOJI else ""
-
-
-def title(key):
-    return icon(key) + TITLES[key]
-
-
 def fmt_time(ev):
     return "all day" if ev.all_day else ev.start.strftime("%-I:%M%p").lower()
 
@@ -78,23 +45,11 @@ def mail_line(m, who=None):
     return f"{name[:28]}: {m.subject[:80]}{extra}"
 
 
-def build(sections, header, greeting, closing, footer, leads):
-    """sections: [(key, [lines])]; leads: {key: voice line}. Returns (text, html) for email."""
-    text = [header, "", greeting, ""]
-    html = ['<div style="font:15px/1.45 -apple-system,Segoe UI,sans-serif;max-width:640px;margin:auto;color:#1c1c1e">'
-            f'<h2 style="margin:0 0 6px">{escape(header)}</h2><p style="margin:0 0 12px">{escape(greeting)}</p>']
-    for key, lines in sections:
-        lead = leads.get(key, "")
-        if not lines and not (key == "attention" and lead):
-            continue
-        heading = title(key)
-        text += [heading.upper()] + ([f"  {lead}"] if lead else []) + [f"  • {l}" for l in lines] + [""]
-        color = "#b3261e" if key == "attention" and lines else "#444"
-        html.append(f'<h3 style="margin:18px 0 4px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:{color}">{escape(heading)}</h3>')
-        if lead:
-            html.append(f'<div style="color:#666;font-style:italic;margin-bottom:4px">{escape(lead)}</div>')
-        if lines:
-            html.append('<ul style="margin:0;padding-left:18px">' + "".join(f"<li>{escape(l)}</li>" for l in lines) + "</ul>")
-    text += [closing, "", footer]
-    html.append(f'<p style="margin-top:20px">{escape(closing)}</p><p style="color:#888;font-size:12px">{escape(footer)}</p></div>')
-    return "\n".join(text), "\n".join(html)
+def build(paragraphs, header, footer):
+    """Email version: the spoken paragraphs as plain text and simple HTML."""
+    text = "\n\n".join([header] + paragraphs + [footer])
+    body = "".join(f'<p style="margin:0 0 14px">{escape(p).replace(chr(10), "<br>")}</p>' for p in paragraphs)
+    html = ('<div style="font:16px/1.55 -apple-system,Segoe UI,sans-serif;max-width:620px;margin:auto;color:#1c1c1e">'
+            f'<h3 style="margin:0 0 14px;color:#666;font-weight:600">{escape(header)}</h3>{body}'
+            f'<p style="color:#999;font-size:12px">{escape(footer)}</p></div>')
+    return text, html

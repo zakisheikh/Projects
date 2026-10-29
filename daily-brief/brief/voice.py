@@ -18,6 +18,13 @@ class Voice:
         with open(path or ROOT / "phrases.toml", "rb") as f:
             return cls(tomllib.load(f), bot, user, seed, last, address)
 
+    def maybe(self, key, p):
+        """Say something from `key` with probability p, else nothing. Always consumes the same randomness."""
+        roll = self.rng.random()
+        if key not in self.bank or roll >= p:
+            return ""
+        return self.say(key)
+
     def say(self, key, **kw):
         options = self.bank[key]
         idx = [i for i in range(len(options)) if i != self.last.get(key)] or [0]

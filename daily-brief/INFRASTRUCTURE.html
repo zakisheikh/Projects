@@ -62,8 +62,12 @@
   <tr><td>7</td><td>🗣️ <b>Voice</b></td><td><code>phrases.toml</code></td><td>Bruno's greeting, lead-ins and sign-off are picked from the phrase banks, never the same twice in a row. Your data lines are not reworded.</td></tr>
   <tr><td>8</td><td>📨 <b>Send</b></td><td>The assembled brief</td><td>Telegram (short, health reduced to a count) and email (full). Then state is saved. Each channel is independent.</td></tr>
 </table>
-<h3>Style</h3>
-<p>Messages are plain text in Bruno's dry, courteous, Jarvis-like voice (“Good morning, sir…”, “Will there be anything else?”). Emojis are off; set <code>[style] emoji = true</code> in <code>config.toml</code> to turn on section icons. How he addresses you is <code>persona.address</code>.</p>
+<h3>Style: Bruno talks, he doesn't print a form</h3>
+<p>There are no section headings and no emojis. Bruno speaks in short paragraphs, like a person: a greeting, what is urgent, what is left on your calendar, and one line for the minor stuff. About 240 lines of wording live in <code>phrases.toml</code> (greetings, day-of-the-week asides, ways of announcing a due payment, quips for busy or quiet days, sign-offs), and the next brief never repeats yesterday's pick for any of them.</p>
+<ul>
+  <li><b>Telegram is deliberately short</b>: at most 3 urgent items and 4 of today's events (<code>[brief]</code> in <code>config.toml</code>), then one line for everything else and a pointer to the email. Health details never appear there.</li>
+  <li><b>Email is the full telling</b>: the same voice, but with prayer times, later coursework, other payments, balances, new statements, receipts and mail worth reading.</li>
+</ul>
 <h3>See what happened to every input</h3>
 <p>Run <code>python3 -m brief --force --dry-run --explain</code> (or the workflow's dry run with that flag). After the message it prints one line per calendar event and email: <em>where it came from</em> (account or calendar), <em>which rule matched</em>, and <em>where it went</em> or <em>why it was dropped</em>. That is the tool for tuning the rules.</p>
 

@@ -8,6 +8,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from . import classify, render, state as stmod, telegram
+from .narrate import Bundle, Narrator
 from .voice import Voice
 from .google import Google
 from .parse import parse_event, parse_mail
@@ -109,12 +110,9 @@ def gather(name, g, cfg, tz, now, since, day_end, rules, n_sender, billers):
     return events, mails, open_bills
 
 
-def tag(line, account, multi):
-    return f"[{account}] {line}" if multi and account else line
-
-
-def assemble(events, mails, open_bills, failures, now, slot, cfg, multi=False, trace=None):
-    today, n = now.date(), cfg["mail"]["max_per_section"]
+def assemble(events, mails, open_bills, failures, now, slot, cfg, trace=None):
+    """Sort everything into a Bundle (who/what/when), ready to be narrated."""
+    today = now.date()
     tomorrow = today + timedelta(days=1)
     horizon = today + timedelta(days=cfg["calendar"]["lookahead_days"])
     soon = today + timedelta(days=cfg["bills"]["due_soon_days"])
@@ -134,42 +132,41 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, multi=False, t
     def on(ev, d):
         return ev.start.date() <= d < max(ev.end.date(), ev.start.date() + timedelta(days=1))
 
-    aliases = cfg["calendar"].get("course_aliases", {})
-    live = [e for e in uniq if on(e, today) and (e.all_day or e.end > now)]
-    rest = [e for e in live if not e.compact and not e.homework]
-    prayer = [e for e in live if e.compact and not e.all_day]
-    nxt = [e for e in uniq if on(e, tomorrow) and not e.compact and not e.homework]
     notice_re = re.compile(cfg["calendar"].get("notice_pattern", r"(?!x)x"))
 
     def is_notice(e):   # Canvas items that are not assignments: polls, advising/enrollment notices, timed announcements
         return e.homework and (not e.all_day or bool(notice_re.search(e.title)))
 
+    live = [e for e in uniq if on(e, today) and (e.all_day or e.end > now)]
+    b = Bundle()
+    b.today = [e for e in live if not e.compact and not e.homework]
+    b.prayer = [e for e in live if e.compact and not e.all_day]
+    b.tomorrow = [e for e in uniq if on(e, tomorrow) and not e.compact and not e.homework]
     hw = [e for e in uniq if e.homework and not is_notice(e) and today <= e.start.date() <= horizon]
     notices = [e for e in uniq if is_notice(e) and today <= e.start.date() <= horizon]
+    b.any_homework = bool(hw or notices)
+    b.hw_urgent = [e for e in hw if e.start.date() <= tomorrow]
+    b.hw_later = [e for e in hw if e.start.date() > tomorrow]
+    b.notice_urgent = [e for e in notices if e.hint and e.start.date() <= tomorrow]
+    b.notices_later = [e for e in notices if e not in b.notice_urgent]
+
     dropped = [m for m in mails if m.ignored]
     mails = [m for m in mails if not m.ignored]
     route = {}   # (account, id) -> where the mail went, for --explain
-
-    def bill_line(m):
-        return tag(render.mail_line(m, who=m.biller), m.account, multi)
 
     def is_alert(m):
         return m.event == "alert" or "security" in m.categories or bool(m.categories and ALERT_WORDS.search(m.subject))
 
     dues = sorted(open_bills, key=lambda m: m.due)
-    attention = [f"{render.icon('ACCOUNT')}Account fault: {f}" for f in failures]
-    attention += [render.icon("HOMEWORK") + "Coursework due: " + render.hw_line(e, aliases) for e in hw if e.start.date() <= tomorrow]
-    attention += [render.icon("NOTICE") + "Notice: " + render.hw_line(e, aliases) for e in notices if e.hint and e.start.date() <= tomorrow]
-    attention += [render.icon("DUE") + "Payment due: " + bill_line(m) for m in dues if m.due <= soon]
-    attention += [render.icon("ALERT") + "Alert: " + tag(render.mail_line(m, who=m.biller), m.account, multi) for m in mails if is_alert(m)]
+    b.failures = failures
+    b.dues_urgent = [m for m in dues if m.due <= soon]
+    b.dues_later = [m for m in dues if m.due > soon]
+    b.alerts = [m for m in mails if is_alert(m)]
     for m in dues:
-        route[(m.account, m.id)] = "Needs attention (due soon)" if m.due <= soon else "Upcoming payments"
-    for m in mails:
-        if is_alert(m):
-            route[(m.account, m.id)] = "Needs attention (alert)"
-
-    # Anything already listed above must not repeat in the per-category sections.
-    shown = {(m.account, m.id) for m in dues} | {(m.account, m.id) for m in mails if is_alert(m)}
+        route[(m.account, m.id)] = "Priority (payment due soon)" if m.due <= soon else "Later payments"
+    for m in b.alerts:
+        route[(m.account, m.id)] = "Priority (alert)"
+    shown = set(route)
 
     def take(pred, section):
         items = [m for m in mails if (m.account, m.id) not in shown and pred(m)]
@@ -178,47 +175,35 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, multi=False, t
             route[(m.account, m.id)] = section
         return items
 
-    health = take(lambda m: m.kind == "health" or "health" in m.categories, "Health")
-    statements = take(lambda m: m.event in ("statement", "due") or ("bill" in m.categories) or ("card" in m.categories), "New bills & statements")
-    paid = take(lambda m: m.event == "paid", "Payments confirmed")
-    bal = {}
+    b.health = take(lambda m: m.kind == "health" or "health" in m.categories, "Health")
+    b.bills = take(lambda m: m.event in ("statement", "due") or ("bill" in m.categories) or ("card" in m.categories), "New bills & statements")
+    b.paid = take(lambda m: m.event == "paid", "Payments confirmed")
+    latest = {}
     for m in take(lambda m: m.event == "balance", "Balances (latest only)"):
         k = (m.account, m.biller)
-        if k not in bal or m.when > bal[k].when:
-            bal[k] = m
-    receipts = take(lambda m: m.event == "receipt" or "receipt" in m.categories, "Receipts (counted)")
-    school = take(lambda m: "school" in m.categories, "School mail")
-    logistics = take(lambda m: "logistics" in m.categories, "Deliveries & travel")
-    infos = take(lambda m: m.event == "info", "Other account notices")
-    important = take(lambda m: m.important and m.unread, "Other important mail")
+        if k not in latest or m.when > latest[k].when:
+            latest[k] = m
+    b.balances = list(latest.values())
+    b.receipts = take(lambda m: m.event == "receipt" or "receipt" in m.categories, "Receipts (counted)")
+    b.school = take(lambda m: "school" in m.categories, "School mail")
+    b.logistics = take(lambda m: "logistics" in m.categories, "Deliveries & travel")
+    b.info = take(lambda m: m.event == "info", "Other account notices")
+    b.important = take(lambda m: m.important and m.unread, "Other important mail")
 
-    L = lambda items: [tag(render.mail_line(m, who=m.biller), m.account, multi) for m in items[:n]]
-    sections = [("attention", attention),
-                ("today", [render.event_line(e) for e in rest]),
-                ("prayer", ["  ·  ".join(f"{e.title} {render.fmt_time(e)}" for e in prayer)] if prayer else []),
-                ("tomorrow", [render.event_line(e) for e in nxt] if slot >= 12 else []),
-                ("homework", [render.hw_line(e, aliases) for e in hw if e.start.date() > tomorrow]),
-                ("notices", [render.hw_line(e, aliases) for e in notices if not (e.hint and e.start.date() <= tomorrow)]),
-                ("dues", [bill_line(m) for m in dues if m.due > soon]),
-                ("health", L(health)), ("bills", L(statements)), ("paid", L(paid)),
-                ("balances", [tag(f"{m.biller}: {m.amount or 'new balance alert, see email'} (latest)", m.account, multi) for m in bal.values()]),
-                ("school", L(school)), ("logistics", L(logistics)),
-                ("receipts", [f"{len(receipts)} receipt(s): " + ", ".join(sorted({render.sender_name(m) for m in receipts})[:6])] if receipts else []),
-                ("info", L(infos)), ("important", L(important))]
     if trace is not None:
         for e in uniq:
-            where = ("Prayer times" if e in prayer else "Rest of today" if e in rest else "Tomorrow" if e in nxt else
-                     ("Needs attention (due ≤ tomorrow)" if e.start.date() <= tomorrow else "Homework later this week") if e in hw else
-                     "Class notices" if e in notices else
+            where = ("Prayer times" if e in b.prayer else "Today's schedule" if e in b.today else "Tomorrow" if e in b.tomorrow else
+                     "Priority (coursework due soon)" if e in b.hw_urgent else "Priority (class notice)" if e in b.notice_urgent else
+                     "Later coursework" if e in b.hw_later else "Later class notices" if e in b.notices_later else
                      "not shown (already over, or outside the window)")
-            trace.append(("cal" if not e.homework else "school", f"{e.calendar}", f"{e.title.strip()[:60]}", where))
+            trace.append(("school" if e.homework else "cal", e.calendar, e.title.strip()[:60], where))
         for m in dropped:
-            trace.append(("mail", f"{m.account}: {render.sender_name(m)[:28]}", m.subject[:60], f"dropped by rule: {m.biller} → ignore"))
+            trace.append(("mail", f"{m.account}: {render.sender_name(m)[:28]}", m.subject[:60], f"dropped by rule: {m.biller} -> ignore"))
         for m in mails:
             how = f"{m.biller}/{m.event}" if m.biller else (",".join(m.categories) or "no rule")
             trace.append(("mail", f"{m.account}: {render.sender_name(m)[:28]}", m.subject[:60],
                           f"{route.get((m.account, m.id), 'not shown (no section wanted it)')}   [matched: {how}]"))
-    return sections
+    return b
 
 
 def build_accounts(cfg, google):
@@ -235,35 +220,6 @@ def build_accounts(cfg, google):
         else:
             out.append((a["name"], Google(os.environ["GOOGLE_CLIENT_ID"], os.environ["GOOGLE_CLIENT_SECRET"], token), None))
     return out
-
-
-def make_leads(voice, sections, hw_any):
-    present = {k for k, lines in sections if lines}
-    leads = {}
-    leads["attention"] = voice.say("attention_intro") if "attention" in present else voice.say("all_clear")
-    leads["today"] = voice.say("today_intro") if "today" in present else ""
-    if "today" not in present:
-        leads["today"] = voice.say("today_empty")
-    for key, bank in (("tomorrow", "tomorrow_intro"), ("homework", "homework_intro"), ("dues", "dues_intro"),
-                      ("notices", "notices_intro"), ("bills", "bills_intro"), ("paid", "paid_intro"), ("health", "health_intro"),
-                      ("important", "mail_intro")):
-        if key in present:
-            leads[key] = voice.say(bank)
-    return leads
-
-
-def telegram_blocks(sections, leads, redact_health):
-    blocks = []
-    for key, lines in sections:
-        if key == "attention":
-            blocks.append((render.title(key), leads.get(key, ""), lines))
-        elif not lines or key in ("receipts", "info", "balances"):
-            continue
-        elif key == "health" and redact_health:
-            blocks.append((render.title(key), "", [f"{len(lines)} item(s). Details are in your email."]))
-        else:
-            blocks.append((render.title(key), leads.get(key, ""), lines))
-    return blocks
 
 
 def run(argv=None, google=None, now=None):
@@ -309,20 +265,26 @@ def run(argv=None, google=None, now=None):
             failures.append(f"{name}: {str(ex)[:160]}")
 
     trace = [] if args.explain else None
-    sections = assemble(events, mails, open_bills, failures, now, slot, cfg, multi=len(accounts) > 1, trace=trace)
+    bundle = assemble(events, mails, open_bills, failures, now, slot, cfg, trace=trace)
     pcfg = cfg.get("persona", {})
-    render.USE_EMOJI = bool(cfg.get("style", {}).get("emoji", False))
-    voice = Voice.load(pcfg.get("name", "Bruno"), pcfg.get("user", ""), f"{now:%Y-%m-%d}-{slot}", st.get("phrases"),
-                       address=pcfg.get("address", "sir"))
-    greeting = voice.say("greet_morning" if slot < 12 else "greet_noon")
-    closing = voice.say("closing_morning" if slot < 12 else "closing_noon")
-    leads = make_leads(voice, sections, True)
+    bcfg = cfg.get("brief", {})
+    aliases = cfg["calendar"].get("course_aliases", {})
+    seed = f"{now:%Y-%m-%d}-{slot}"
+
+    def speak(compact):   # two tellings of the same day: a short one for Telegram, the full one for email
+        v = Voice.load(pcfg.get("name", "Bruno"), pcfg.get("user", ""), seed, st.get("phrases"), address=pcfg.get("address", "sir"))
+        nar = Narrator(v, aliases, now.date(), cfg["delivery"].get("telegram_redact_health", True) if compact else False, compact,
+                       {"priority": bcfg.get("telegram_max_priority", 3), "events": bcfg.get("telegram_max_events", 4)})
+        return nar.paragraphs(bundle, slot, now), v
+
+    full, voice = speak(False)
+    short, _ = speak(True)
     label = "Morning" if slot < 12 else "Midday"
     header = f"{label} brief — {now:%a %b %-d}"
     unread = sum(m.unread for m in mails)
     footer = f"{len(mails)} new emails checked ({unread} unread). Rules only, no AI."
-    text, html = render.build(sections, header, greeting, closing, footer, leads)
-    tg = telegram.fmt(greeting, telegram_blocks(sections, leads, cfg["delivery"].get("telegram_redact_health", True)), closing)
+    text, html = render.build(full, header, footer)
+    tg = telegram.fmt(short)
 
     if args.dry_run:
         print(text)
@@ -330,7 +292,7 @@ def run(argv=None, google=None, now=None):
             print("\n--- where every input went ---")
             for icon, src, what, where in trace:
                 print(f"{icon} {src} | {what}\n     → {where}")
-        print("\n--- telegram preview ---\n" + tg.replace("<b>", "").replace("</b>", "").replace("<i>", "").replace("</i>", ""))
+        print("\n--- telegram preview ---\n" + tg.replace("&#x27;", "'").replace("&amp;", "&"))
         return 0
 
     sent, problems = [], []
