@@ -31,6 +31,51 @@ class Bundle:
     any_homework: bool = False
 
 
+@dataclass
+class Item:
+    """One list entry. `text` is the plain-text bullet; the other fields let the HTML email style it richly."""
+    text: str
+    kind: str = ""          # event | hw | exam | notice | bill | mail | alert | action | account | paid
+    title: str = ""
+    label: str = ""         # time ("5:00pm") or date ("Fri 10/30")
+    day: object = None      # a date, for tiles
+    course: str = ""
+    hint: str = ""
+    amount: str = ""
+    due: str = ""
+    who: str = ""
+    link: str = ""
+    flags: list = field(default_factory=list)   # e.g. ["autopay off", "partner:Narjis", "overlap", "urgent"]
+
+
+@dataclass
+class Block:
+    key: str
+    lead: str = ""
+    items: list = field(default_factory=list)
+    text: str = ""                              # a plain sentence instead of / in addition to the list
+    notes: list = field(default_factory=list)   # extra sentences under the list (overlap warnings, quips)
+    in_priority: bool = False                   # followup: already shown inside the priority list
+
+
+def to_paragraphs(blocks):
+    """Spoken/plain-text rendering (Telegram and the email's text part)."""
+    out = []
+    for blk in blocks:
+        if blk.key == "followup":
+            if not blk.in_priority and blk.text:
+                out.append(blk.text)
+            continue
+        if blk.items:
+            para = bullets(blk.lead, [i.text for i in blk.items])
+            if blk.notes:
+                para += "\n" + "\n".join(blk.notes)
+            out.append(para)
+        elif blk.text:
+            out.append(blk.text + ("\n" + "\n".join(blk.notes) if blk.notes else ""))
+    return out
+
+
 def when(d, today):
     delta = (d - today).days
     if delta == 0:
@@ -75,8 +120,7 @@ class Narrator:
 
     def event_text(self, e):
         stamp = "all day" if e.all_day else e.start.strftime("%-I:%M%p").lower()
-        mine = (f" ({self.partner_label})" if self.partner_label and e.creator in self.partner_emails
-                and self.partner_label.lower() not in e.title.lower() else "")
+        mine = f" ({self.partner_label})" if self.is_partner(e) else ""
         return f"{stamp} · {e.title.strip()}{mine}"
 
     def mail_line(self, m):
@@ -111,72 +155,107 @@ class Narrator:
         return self.v.say("follow_up", who=join_list(self.capped(names)))
 
     def paragraphs(self, b, slot, now):
-        v, out = self.v, []
-        out.append(v.say("greet_morning" if slot < 12 else "greet_noon"))
-        aside = v.maybe(f"dow_{now.weekday()}", 0.5)
-        if aside:
-            out[-1] += " " + aside
+        return to_paragraphs(self.compose(b, slot, now))
 
-        # urgent: things with a deadline in the next day or three, alerts, broken accounts
+    def compose(self, b, slot, now):
+        v, blocks = self.v, []
+        greeting = v.say("greet_morning" if slot < 12 else "greet_noon")
+        aside = v.maybe(f"dow_{now.weekday()}", 0.5)
+        blocks.append(Block("greeting", text=greeting + (" " + aside if aside else "")))
+
+        # bills (one entry per biller); the sentence is what Telegram says
+        bills = self.followups(b)
         follow = self.followup_sentence(b)
-        urgent = [f"Account problem, {f.split(':')[0]}: {f.split(':', 1)[-1].strip()[:80]}" for f in b.failures]
-        urgent += [render.hw_line(e, self.aliases) for e in b.notice_urgent]
+        bill_items = []
+        for m in list(b.dues_urgent) + list(b.dues_later) + list(b.bills):
+            who = m.biller or render.sender_name(m)
+            if any(i.who == who for i in bill_items):
+                continue
+            flags = (["autopay off"] if m.note == "autopay OFF" else []) + (["urgent"] if m in b.dues_urgent else [])
+            bill_items.append(Item(text=who, kind="bill", who=who, amount=m.amount or "", day=m.due,
+                                   due=(("overdue since " if m.due and m.due < self.today else "due ") + when(m.due, self.today)) if m.due else "",
+                                   flags=flags))
+
+        # urgent: things with a deadline soon, alerts, broken accounts
+        urgent = [Item(f"Account problem, {f.split(':')[0]}: {f.split(':', 1)[-1].strip()[:80]}", "account", who=f.split(':')[0]) for f in b.failures]
+        urgent += [Item(render.hw_line(e, self.aliases), "notice", title=re.sub(r"\s*\((classic|new)\)\s*$", "", e.title.strip(), flags=re.I), label=e.start.strftime("%a %-m/%-d"), day=e.start.date(),
+                        course=render.course_name(e.course, self.aliases) if e.course else "", hint=e.hint, flags=["urgent"]) for e in b.notice_urgent]
         if follow and b.dues_urgent:
-            urgent.append(follow)
-        urgent += [f"Action needed, {self.action_line(m)}" for m in b.action_urgent]
-        urgent += [f"Alert, {self.mail_line(m)}" for m in b.alerts]
+            urgent.append(Item(follow, "followup"))
+        urgent += [Item(f"Action needed, {self.action_line(m)}", "action", title=m.subject, who=m.biller or render.sender_name(m),
+                        due=m.due.strftime("%a %-m/%-d") if m.due else "", link=m.link) for m in b.action_urgent]
+        urgent += [Item(f"Alert, {self.mail_line(m)}", "alert", title=m.subject, who=m.biller or render.sender_name(m), link=m.link) for m in b.alerts]
         if urgent:
             shown = urgent[: self.caps["priority"]]
             if len(urgent) > len(shown):
-                shown.append(v.say("more_priority", k=len(urgent) - len(shown)))
-            out.append(bullets(v.say("priority_open"), shown))
+                shown.append(Item(v.say("more_priority", k=len(urgent) - len(shown)), "more"))
+            blocks.append(Block("priority", v.say("priority_open"), shown))
         else:
-            out.append(v.say("all_clear"))
+            blocks.append(Block("allclear", text=v.say("all_clear")))
 
         # the schedule window this brief is responsible for
         if b.today:
-            items = [self.event_text(e) for e in b.today[: self.caps["events"]]]
+            items = [Item(self.event_text(e), "event", title=e.title.strip(), label="all day" if e.all_day else e.start.strftime("%-I:%M %p").lstrip("0"),
+                          flags=([f"partner:{self.partner_label}"] if self.is_partner(e) else []) +
+                                (["overlap"] if any(e in pair for pair in b.overlaps) else []))
+                     for e in b.today[: self.caps["events"]]]
             if len(b.today) > self.caps["events"]:
-                items.append(v.say("more_items", k=len(b.today) - self.caps["events"]))
-            para = bullets(v.say("schedule_morning_open" if slot < 12 else "schedule_open"), items)
-            for x, y in b.overlaps:
-                para += "\n" + v.say("overlap_warning", a=x.title.strip(), b=y.title.strip(), t=y.start.strftime("%-I:%M %p").replace(":00 ", " "))
+                items.append(Item(v.say("more_items", k=len(b.today) - self.caps["events"]), "more"))
+            notes = [v.say("overlap_warning", a=x.title.strip(), b=y.title.strip(), t=y.start.strftime("%-I:%M %p").replace(":00 ", " ")) for x, y in b.overlaps]
             if len(b.today) >= 5 and not self.compact:
-                para += "\n" + v.say("quip_busy")
-            out.append(para)
+                notes.append(v.say("quip_busy"))
+            blocks.append(Block("schedule", v.say("schedule_morning_open" if slot < 12 else "schedule_open"), items, notes=notes))
         else:
-            out.append(v.say("schedule_morning_empty" if slot < 12 else "schedule_empty"))
+            blocks.append(Block("schedule_empty", text=v.say("schedule_morning_empty" if slot < 12 else "schedule_empty")))
 
         # coursework for the week, dated, soonest first (the same in both briefs)
+        def hw_item(e, kind):
+            return Item(render.hw_line(e, self.aliases), kind, title=re.sub(r"\s*\((classic|new)\)\s*$", "", e.title.strip(), flags=re.I),
+                        label=e.start.strftime("%a %-m/%-d"), day=e.start.date(),
+                        course=render.course_name(e.course, self.aliases) if e.course else "", hint=e.hint)
         if b.hw_week:
-            items = [render.hw_line(e, self.aliases) for e in sorted(b.hw_week, key=lambda e: e.start)]
-            out.append(bullets(v.say("homework_week"), self.capped(items, "week")))
+            items = [hw_item(e, "hw") for e in sorted(b.hw_week, key=lambda e: e.start)]
+            blocks.append(Block("homework", v.say("homework_week"), self.capped_items(items, "week")))
         elif not b.any_homework:
-            out.append(v.say("homework_none"))
+            blocks.append(Block("homework_none", text=v.say("homework_none")))
         if b.exams:
-            items = [render.hw_line(e, self.aliases) for e in sorted(b.exams, key=lambda e: e.start)]
-            out.append(bullets(v.say("exams_open"), self.capped(items, "week")))
+            items = [hw_item(e, "exam") for e in sorted(b.exams, key=lambda e: e.start)]
+            blocks.append(Block("exams", v.say("exams_open"), self.capped_items(items, "week")))
         if b.notices_later:
-            items = [render.hw_line(e, self.aliases) for e in sorted(b.notices_later, key=lambda e: e.start)]
-            out.append(bullets(v.say("notices_open"), self.capped(items, "week")))
+            items = [hw_item(e, "notice") for e in sorted(b.notices_later, key=lambda e: e.start)]
+            blocks.append(Block("notices", v.say("notices_open"), self.capped_items(items, "week")))
 
-        # bills: one follow-up line wherever it belongs
-        if follow and not b.dues_urgent:
-            out.append(follow)
+        blocks.append(Block("followup", text=follow, items=bill_items, in_priority=bool(follow and b.dues_urgent)))
 
         if self.compact:
-            out.append(v.say("see_email"))
+            blocks.append(Block("see_email", text=v.say("see_email")))
         else:
             if b.statements:
-                out.append(v.say("statements_no_due", items=join_list(sorted({m.biller or render.sender_name(m) for m in b.statements}))))
-            for key, items in (("paid_open", [f"{m.biller or render.sender_name(m)}{' · ' + m.amount if m.amount else ''}" for m in b.paid]),
-                               ("health_open", [self.mail_line(m) for m in b.health]),
-                               ("admin_open", [self.mail_line(m) for m in b.admin]),
-                               ("logistics_open", [self.mail_line(m) for m in b.travel]),
-                               ("renewals_open", [self.mail_line(m) for m in b.renewals]),
-                               ("action_open", [self.action_line(m) for m in b.action]),
-                               ("mail_open", [self.mail_line(m) for m in b.other])):
+                names = sorted({m.biller or render.sender_name(m) for m in b.statements})
+                blocks.append(Block("statements", text=v.say("statements_no_due", items=join_list(names)), items=[Item(n, "mail", who=n) for n in names]))
+
+            def mail_items(ms, kind="mail"):
+                return [Item(self.mail_line(m), kind, title=m.subject, who=m.biller or render.sender_name(m), link=m.link) for m in ms]
+            for key, bank, items in (
+                    ("paid", "paid_open", [Item(f"{m.biller or render.sender_name(m)}{' · ' + m.amount if m.amount else ''}", "paid",
+                                                who=m.biller or render.sender_name(m), amount=m.amount or "", link=m.link) for m in b.paid]),
+                    ("health", "health_open", mail_items(b.health)),
+                    ("admin", "admin_open", mail_items(b.admin)),
+                    ("travel", "logistics_open", mail_items(b.travel)),
+                    ("renewals", "renewals_open", mail_items(b.renewals)),
+                    ("action", "action_open", [Item(self.action_line(m), "action", title=m.subject, who=m.biller or render.sender_name(m),
+                                                    due=m.due.strftime("%a %-m/%-d") if m.due else "", link=m.link) for m in b.action]),
+                    ("other", "mail_open", mail_items(b.other))):
                 if items:
-                    out.append(bullets(v.say(key), self.capped(items)))
-        out.append(v.say("closing_morning" if slot < 12 else "closing_noon"))
-        return out
+                    blocks.append(Block(key, v.say(bank), self.capped_items(items)))
+        blocks.append(Block("closing", text=v.say("closing_morning" if slot < 12 else "closing_noon")))
+        return blocks
+
+    def is_partner(self, e):
+        return bool(self.partner_label and e.creator in self.partner_emails and self.partner_label.lower() not in e.title.lower())
+
+    def capped_items(self, items, key="list"):
+        n = self.caps[key]
+        if len(items) <= n:
+            return items
+        return items[:n] + [Item(self.v.say("more_items", k=len(items) - n), "more")]

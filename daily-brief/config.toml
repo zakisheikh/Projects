@@ -20,10 +20,12 @@ telegram_redact_health = true      # Telegram only says "N health items"; detail
 # (run auth_setup.py once per account). The first account with send_from=true sends the brief.
 [[accounts]]
 name = "zshake21"
+email = "zshake21@gmail.com"
 token_env = "GOOGLE_REFRESH_TOKEN"
 send_from = true
 [[accounts]]
 name = "zakisheikh21"
+email = "zakisheikh21@gmail.com"
 token_env = "GOOGLE_REFRESH_TOKEN_2"
 
 [calendar]

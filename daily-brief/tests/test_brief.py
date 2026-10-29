@@ -241,6 +241,21 @@ class Tests(unittest.TestCase):
         for emailonly in ("spotify.com", "Document is Ready", "Hertz", "Verizon"):
             self.assertNotIn(emailonly, tg)
 
+    def test_html_email_is_designed_and_safe(self):
+        import brief.main as bm
+        FakeGoogle.sent = None
+        run(["--force"], google=FakeGoogle(MAIN + [msg("x9", "Evil <b>Co</b> <evil@x.com>", "<script>alert(1)</script> Final Notice invoice")]), now=NOW)
+        html = FakeGoogle.sent[3]
+        self.assertIn("prefers-color-scheme: dark", html)                    # dark mode
+        self.assertIn('name="viewport"', html)                               # phone friendly
+        self.assertIn("role=\"presentation\"", html)                         # table layout for old clients
+        for need in ("Thursday, October 29", "Dentist", "$144.18", "Conservice utilities", "EXAM".title()):
+            self.assertIn(need, html)
+        self.assertNotIn("<script>", html)                                   # mail text is escaped, never injected
+        self.assertNotIn("http://", html.replace("https://mail.google.com", ""))   # no remote resources
+        self.assertNotIn("<img", html)                                       # nothing to block or track
+        self.assertIn("https://mail.google.com/mail/", html)                 # mail rows link to the message
+
     def test_paid_settles_due(self):
         paid = msg("c9", "noreplyalerts@chase.com", "We've received your Sample Visa payment", day=28)
         self.assertNotIn("$40.00", self.run_text(FakeGoogle(MAIN + [paid])))

@@ -38,3 +38,4 @@ class Mail:
     event: Optional[str] = None   # due|statement|paid|balance|alert|receipt|info
     note: str = ""
     ignored: bool = False
+    link: str = ""

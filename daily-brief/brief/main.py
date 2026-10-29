@@ -7,8 +7,8 @@ from datetime import datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import classify, render, state as stmod, telegram
-from .narrate import Bundle, Narrator
+from . import classify, email_html, render, state as stmod, telegram
+from .narrate import Bundle, Narrator, to_paragraphs
 from .voice import Voice
 from .google import Google
 from .parse import parse_event, parse_mail
@@ -62,9 +62,10 @@ def collect_events(g, cfg, tz, start, end):
     return out
 
 
-def enrich(g, mid, tz, account, rules, n_sender, billers):
+def enrich(g, mid, tz, account, rules, n_sender, billers, mail_user=""):
     m = parse_mail(g.message(mid), tz)
     m.account = account
+    m.link = f"https://mail.google.com/mail/?authuser={mail_user}#all/{mid}" if mail_user else f"https://mail.google.com/mail/#all/{mid}"
     hit = classify.match_biller(m, billers)
     if hit:
         m.biller, m.kind, m.event = hit
@@ -83,17 +84,17 @@ def enrich(g, mid, tz, account, rules, n_sender, billers):
     return m
 
 
-def collect_mail(g, tz, since, account, rules, n_sender, billers):
+def collect_mail(g, tz, since, account, rules, n_sender, billers, mail_user=""):
     q = f"after:{int(since.timestamp())} -in:spam -in:trash -category:promotions -category:social"
-    return [enrich(g, mid, tz, account, rules, n_sender, billers) for mid in g.search(q, 100)]
+    return [enrich(g, mid, tz, account, rules, n_sender, billers, mail_user) for mid in g.search(q, 100)]
 
 
-def collect_open_bills(g, tz, now, days, account, rules, n_sender, billers, grace=5):
+def collect_open_bills(g, tz, now, days, account, rules, n_sender, billers, grace=5, mail_user=""):
     """Look back for 'payment due' notices that no later 'paid' notice has settled."""
     since = now - timedelta(days=days)
     q = (f"after:{int(since.timestamp())} -in:spam -in:trash "
          "(subject:(due OR statement OR bill OR invoice OR payment OR rent OR autopay OR overdue))")
-    mails = [enrich(g, mid, tz, account, rules, n_sender, billers) for mid in g.search(q, 150)]
+    mails = [enrich(g, mid, tz, account, rules, n_sender, billers, mail_user) for mid in g.search(q, 150)]
     paid = [m for m in mails if m.event == "paid"]
     out = []
     for m in mails:
@@ -111,9 +112,10 @@ def collect_open_bills(g, tz, now, days, account, rules, n_sender, billers, grac
 
 def gather(name, g, cfg, tz, now, since, day_end, rules, n_sender, billers):
     events = collect_events(g, cfg, tz, datetime.combine(now.date(), time.min, tz), day_end)
-    mails = collect_mail(g, tz, since, name, rules, n_sender, billers)
+    user = next((a.get("email", "") for a in cfg["accounts"] if a["name"] == name), "")
+    mails = collect_mail(g, tz, since, name, rules, n_sender, billers, user)
     open_bills = collect_open_bills(g, tz, now, cfg["bills"]["lookback_days"], name, rules, n_sender, billers,
-                                    cfg["bills"].get("overdue_grace_days", 5))
+                                    cfg["bills"].get("overdue_grace_days", 5), user)
     return events, mails, open_bills
 
 
@@ -306,15 +308,18 @@ def run(argv=None, google=None, now=None):
         nar = Narrator(v, aliases, now.date(), compact,
                        {"priority": bcfg.get("telegram_max_priority", 3), "events": bcfg.get("telegram_max_events", 6)},
                        partner=(cfg["calendar"].get("partner_emails", []), cfg["calendar"].get("partner_label", "")))
-        return nar.paragraphs(bundle, slot, now), v
+        return nar.compose(bundle, slot, now), v
 
-    full, voice = speak(False)
-    short, _ = speak(True)
+    full_blocks, voice = speak(False)
+    short_blocks, _ = speak(True)
+    full, short = to_paragraphs(full_blocks), to_paragraphs(short_blocks)
     label = "Morning" if slot < 12 else "Midday"
     header = f"{label} brief — {now:%a %b %-d}"
     unread = sum(m.unread for m in mails)
     footer = f"{len(mails)} new emails checked ({unread} unread). Rules only, no AI."
-    text, html = render.build(full, header, footer)
+    text = "\n\n".join([header] + full + [footer])
+    preheader = next((i.text for blk in full_blocks if blk.key == "priority" for i in blk.items if i.kind not in ("more",)), full[0])
+    html = email_html.render(full_blocks, header, now, footer, preheader=preheader)
     tg = telegram.fmt(short)
 
     if args.dry_run:
