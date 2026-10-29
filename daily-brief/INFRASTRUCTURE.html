@@ -63,7 +63,7 @@
   <tr><td>8</td><td>📨 <b>Send</b></td><td>The assembled brief</td><td>Telegram (short, health reduced to a count) and email (full). Then state is saved. Each channel is independent.</td></tr>
 </table>
 <h3>Emoji key</h3>
-<p>🚨 needs attention · 📅 calendar · 🕌 prayer times · 🌅 tomorrow · 📚 homework (Canvas) · 💳 unpaid / upcoming payment · 🏥 health · 📄 new bill or statement · ✅ payment confirmed · 🏦 balance · 🧾 receipts · 🎓 school mail · ✈️ travel &amp; deliveries · ✉️ other important mail · ⚠️ alert · 🔑 a Gmail login failed. The last line of every message lists the sources: ✉️ how many emails from how many accounts, 📅 events from how many calendars, 📚 Canvas items, 💳 bills tracked.</p>
+<p>🚨 needs attention · 📅 calendar · 🕌 prayer times · 🌅 tomorrow · 📚 homework (Canvas) · 💳 unpaid / upcoming payment · 🏥 health · 📄 new bill or statement · ✅ payment confirmed · 🏦 balance · 🧾 receipts · 🎓 school mail · ✈️ travel &amp; deliveries · ✉️ other important mail · ⚠️ alert · 🔑 a Gmail login failed.</p>
 <h3>See what happened to every input</h3>
 <p>Run <code>python3 -m brief --force --dry-run --explain</code> (or the workflow's dry run with that flag). After the message it prints one line per calendar event and email: <em>where it came from</em> (account or calendar), <em>which rule matched</em>, and <em>where it went</em> or <em>why it was dropped</em>. That is the tool for tuning the rules.</p>
 
@@ -117,7 +117,7 @@
   <tr><td>Course tags are ugly: <code>CS549-09-Fall2026</code>, <code>FA26: CS-157B Sec 01 - Data BS Man Sys II</code>, <code>2267_MESA_EXSC 126B_42431</code></td><td><code>course_aliases</code> maps them to short names: ML, Databases, Exercise Sci.</td></tr>
   <tr><td>The real deadline time is only in the description (“…by Friday, October 30 at 7:00 PM”)</td><td>A deadline hint is pulled from the description and shown (“by 7:00 PM”) when present.</td></tr>
   <tr><td>The same Canvas events <b>also appear in your main calendar</b> (same ids)</td><td>Duplicates are merged, so each item shows once.</td></tr>
-  <tr><td>Some Canvas items are not homework (class polls, advising notices)</td><td>They show up as due items too. Cheap to live with; can be excluded by title if it bugs you.</td></tr>
+  <tr><td>Some Canvas items are not assignments (class polls, advising notices, timed announcements)</td><td>Decided case by case: they get their own <b>📢 Class notices</b> section instead of the homework list. A notice with a deadline in its description (“vote by 7:00 PM”) and a date of today or tomorrow is also flagged under Needs attention. Wording is controlled by <code>notice_pattern</code>.</td></tr>
   <tr><td>I cannot see whether an assignment has been <i>submitted</i></td><td>The brief lists what is due, not what is unsubmitted. Overdue-but-unsubmitted is not detectable from the feed.</td></tr>
   <tr><td><b>Prayer Times</b> calendar adds 5 events a day; <b>Phases of the Moon</b> is noise</td><td>Prayer times collapse to one line of what is still ahead (<code>compact_calendars</code>); the moon calendar is excluded.</td></tr>
   <tr><td><b>Joint Ops</b> (shared with your wife) holds classes, flights, parties</td><td>Included as normal events. Her entries appear there too.</td></tr>

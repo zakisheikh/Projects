@@ -136,7 +136,13 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, multi=False, t
     rest = [e for e in live if not e.compact and not e.homework]
     prayer = [e for e in live if e.compact and not e.all_day]
     nxt = [e for e in uniq if on(e, tomorrow) and not e.compact and not e.homework]
-    hw = [e for e in uniq if e.homework and today <= e.start.date() <= horizon]
+    notice_re = re.compile(cfg["calendar"].get("notice_pattern", r"(?!x)x"))
+
+    def is_notice(e):   # Canvas items that are not assignments: polls, advising/enrollment notices, timed announcements
+        return e.homework and (not e.all_day or bool(notice_re.search(e.title)))
+
+    hw = [e for e in uniq if e.homework and not is_notice(e) and today <= e.start.date() <= horizon]
+    notices = [e for e in uniq if is_notice(e) and today <= e.start.date() <= horizon]
     dropped = [m for m in mails if m.ignored]
     mails = [m for m in mails if not m.ignored]
     route = {}   # (account, id) -> where the mail went, for --explain
@@ -150,6 +156,7 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, multi=False, t
     dues = sorted(open_bills, key=lambda m: m.due)
     attention = [f"🔑 ACCOUNT  {f}" for f in failures]
     attention += ["📚 HOMEWORK  " + render.hw_line(e, aliases) for e in hw if e.start.date() <= tomorrow]
+    attention += ["📢 NOTICE  " + render.hw_line(e, aliases) for e in notices if e.hint and e.start.date() <= tomorrow]
     attention += ["💳 DUE  " + bill_line(m) for m in dues if m.due <= soon]
     attention += ["⚠️ ALERT  " + tag(render.mail_line(m, who=m.biller), m.account, multi) for m in mails if is_alert(m)]
     for m in dues:
@@ -188,6 +195,7 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, multi=False, t
                 ("prayer", ["  ·  ".join(f"{e.title} {render.fmt_time(e)}" for e in prayer)] if prayer else []),
                 ("tomorrow", [render.event_line(e) for e in nxt] if slot >= 12 else []),
                 ("homework", [render.hw_line(e, aliases) for e in hw if e.start.date() > tomorrow]),
+                ("notices", [render.hw_line(e, aliases) for e in notices if not (e.hint and e.start.date() <= tomorrow)]),
                 ("dues", [bill_line(m) for m in dues if m.due > soon]),
                 ("health", L(health)), ("bills", L(statements)), ("paid", L(paid)),
                 ("balances", [tag(f"{m.biller}: {m.amount or 'new balance alert, see email'} (latest)", m.account, multi) for m in bal.values()]),
@@ -198,6 +206,7 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, multi=False, t
         for e in uniq:
             where = ("Prayer times" if e in prayer else "Rest of today" if e in rest else "Tomorrow" if e in nxt else
                      ("Needs attention (due ≤ tomorrow)" if e.start.date() <= tomorrow else "Homework later this week") if e in hw else
+                     "Class notices" if e in notices else
                      "not shown (already over, or outside the window)")
             trace.append(("📅" if not e.homework else "📚", f"{e.calendar}", f"{e.title.strip()[:60]}", where))
         for m in dropped:
@@ -233,7 +242,7 @@ def make_leads(voice, sections, hw_any):
     if "today" not in present:
         leads["today"] = voice.say("today_empty")
     for key, bank in (("tomorrow", "tomorrow_intro"), ("homework", "homework_intro"), ("dues", "dues_intro"),
-                      ("bills", "bills_intro"), ("paid", "paid_intro"), ("health", "health_intro"),
+                      ("notices", "notices_intro"), ("bills", "bills_intro"), ("paid", "paid_intro"), ("health", "health_intro"),
                       ("important", "mail_intro")):
         if key in present:
             leads[key] = voice.say(bank)
@@ -306,13 +315,9 @@ def run(argv=None, google=None, now=None):
     label = "Morning" if slot < 12 else "Midday"
     header = f"{label} brief — {now:%a %b %-d}"
     unread = sum(m.unread for m in mails)
-    n_hw = len({(e.title, e.start) for e in events if e.homework})
-    n_cal = len({e.calendar for e in events})
-    footer = (f"Sources: ✉️ {len(mails)} new emails ({unread} unread) from {len(accounts)} Gmail account(s) since {since:%a %-I%p} · "
-              f"📅 {len({(e.title, e.start, e.end) for e in events})} events from {n_cal} calendar(s) · 📚 {n_hw} Canvas/homework items · "
-              f"💳 {len(open_bills)} unpaid bills tracked. Rules only, no AI.")
+    footer = f"{len(mails)} new emails checked ({unread} unread). Rules only, no AI."
     text, html = render.build(sections, header, greeting, closing, footer, leads)
-    tg = telegram.fmt(greeting, telegram_blocks(sections, leads, cfg["delivery"].get("telegram_redact_health", True)), closing, footer)
+    tg = telegram.fmt(greeting, telegram_blocks(sections, leads, cfg["delivery"].get("telegram_redact_health", True)), closing)
 
     if args.dry_run:
         print(text)

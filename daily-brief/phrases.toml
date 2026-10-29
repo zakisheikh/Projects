@@ -66,6 +66,12 @@ homework_intro = [
   "Due soon on the school front:",
   "Academic deadlines:",
 ]
+notices_intro = [
+  "Class notices, not assignments:",
+  "Heads up from your classes:",
+  "Announcements and polls:",
+  "Course admin worth a glance:",
+]
 homework_none = [
   "No assignments due this week.",
   "Homework is clear for now.",

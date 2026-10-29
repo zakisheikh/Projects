@@ -28,6 +28,8 @@ lookahead_days = 7
 # Calendars whose every event is an assignment (e.g. the subscribed Canvas feed). Fill in the calendar's name.
 # Canvas feeds import as all-day events titled "<assignment> [<COURSE>]"; the date is the due date.
 homework_calendars = ["Zaki Sheikh Calendar (Canvas)"]
+# Canvas items that are not assignments (shown separately as notices). Timed (non all-day) Canvas events are notices too.
+notice_pattern = '(?i)\b(poll|survey|vote|advising|enrollment|registration|office hours|announcement)\b'
 course_tag_is_homework = true             # any event ending in a [COURSE] tag counts (Canvas copies in your main calendar too)
 # For all other calendars, events matching this are treated as homework.
 homework_pattern = '(?i)\b(homework|assignment|hw ?\d+|quiz|exam|midterm|essay|problem set|pset|lab report|worksheet)\b'

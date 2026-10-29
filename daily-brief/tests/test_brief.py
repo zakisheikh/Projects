@@ -66,6 +66,8 @@ class FakeGoogle:
              "description": "Please vote by [Friday, October 30 at 7:00 PM]."},
             {"summary": "Week 10-Old Faithful Again [2267_MESA_EXSC 126B_42431]", "start": {"date": "2026-10-31"},
              "end": {"date": "2026-11-01"}},
+            {"summary": "Quick Poll - Nov. 24 Class [CS549-09-Fall2026]", "start": {"date": "2026-10-30"},
+             "end": {"date": "2026-10-31"}, "description": "Please submit your preference by [Friday, October 30 at 7:00 PM]."},
             {"summary": "Essay 2 [FA26: CS-157B Sec 01 - Data BS Man Sys II]", "start": {"date": "2026-11-03"},
              "end": {"date": "2026-11-04"}},
         ]
@@ -156,6 +158,8 @@ class Tests(unittest.TestCase):
         self.assertIn("(ML)", text)                             # course alias
         self.assertIn("by 7:00 PM", text)                       # deadline hint from description
         self.assertIn("Databases", text)
+        self.assertIn("NOTICE  Fri 10/30 · Quick Poll", text)   # poll with a deadline is flagged, but not as homework
+        self.assertNotIn("HOMEWORK  Fri 10/30 · Quick Poll", text)
         self.assertIn("HOMEWORK", text)
         self.assertIn("DUE  Chase", text)                       # unpaid, due in 3 days
         self.assertIn("$40.00", text)
@@ -180,7 +184,7 @@ class Tests(unittest.TestCase):
         with contextlib.redirect_stdout(buf):
             run(["--force", "--dry-run", "--explain"], google=FakeGoogle(MAIN), now=NOW)
         out = buf.getvalue()
-        for token in ("🚨", "📅", "📚", "💳", "✉️", "Sources: ✉️", "where every input went", "dropped by rule: Chase offers",
+        for token in ("🚨", "📅", "📚", "💳", "✉️", "where every input went", "dropped by rule: Chase offers",
                       "[matched: Chase/due]", "Prayer times"):
             self.assertIn(token, out)
 

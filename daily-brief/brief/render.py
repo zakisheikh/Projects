@@ -6,6 +6,7 @@ TITLES = {
     "prayer": "🕌 Prayer times",
     "tomorrow": "🌅 Tomorrow",
     "homework": "📚 Homework later this week",
+    "notices": "📢 Class notices",
     "dues": "💳 Upcoming payments (unpaid)",
     "health": "🏥 Health & medical",
     "bills": "📄 New bills & statements",
