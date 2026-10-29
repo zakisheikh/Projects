@@ -49,6 +49,8 @@ class Item:
     who: str = ""
     link: str = ""
     detail: str = ""        # a second line of context (description snippet, statement balance, email preview)
+    start: object = None    # datetimes for timed events (drawn on the day line)
+    end: object = None
     flags: list = field(default_factory=list)   # e.g. ["autopay off", "partner:Narjis", "overlap", "urgent"]
 
 
@@ -219,6 +221,7 @@ class Narrator:
         # the schedule window this brief is responsible for
         if b.today:
             items = [Item(self.event_text(e), "event", title=e.title.strip() + self.span_note(e), link=e.link,
+                          start=None if e.all_day else e.start, end=None if e.all_day else e.end,
                           label="All day" if e.all_day else e.start.strftime("%-I:%M %p"), detail="" if e.all_day else "until " + e.end.strftime("%-I:%M %p"),
                           flags=([f"partner:{self.partner_label}"] if self.is_partner(e) else []) +
                                 (["overlap"] if any(e in pair for pair in b.overlaps) else []))
