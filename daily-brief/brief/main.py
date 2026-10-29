@@ -176,7 +176,16 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, trace=None):
         return items
 
     b.health = take(lambda m: m.kind == "health" or "health" in m.categories, "Health")
-    b.bills = take(lambda m: m.event in ("statement", "due") or ("bill" in m.categories) or ("card" in m.categories), "New bills & statements")
+    paid_notices = [m for m in mails if m.event == "paid"]
+
+    def settled(m):   # a payment notice from the same biller arrived after this bill
+        return any(p.biller == m.biller and p.account == m.account and p.when >= m.when for p in paid_notices)
+
+    candidates = take(lambda m: m.event in ("statement", "due") or ("bill" in m.categories) or ("card" in m.categories), "New bills & statements")
+    for m in candidates:
+        if m.biller and settled(m):
+            route[(m.account, m.id)] = "settled by a later payment notice"
+    b.bills = [m for m in candidates if not (m.biller and settled(m))]
     b.paid = take(lambda m: m.event == "paid", "Payments confirmed")
     latest = {}
     for m in take(lambda m: m.event == "balance", "Balances (latest only)"):

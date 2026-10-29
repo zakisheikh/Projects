@@ -135,7 +135,7 @@ rules = [
   { subject = '(?i)late|past due|notice', event = "alert" },
 ]
 [[billers]]
-name = "Utilities (Conservice)"
+name = "Conservice utilities"
 kind = "utility"
 from = '(?i)conservicemail\.com'
 rules = [{ subject = '(?i)statement', event = "due" }]
@@ -171,6 +171,16 @@ rules = [
   { subject = '(?i)requests|charged you|reminder', event = "due" },
   { subject = '(?i)you paid|completed|you received|sent you', event = "receipt" },
 ]
+[[billers]]
+name = "TurboTax (muted)"
+kind = "marketing"
+from = '(?i)turbotax|intuit\.com'
+rules = [{ subject = '.', event = "ignore" }]
+[[billers]]
+name = "ChargePoint (muted)"
+kind = "marketing"
+from = '(?i)chargepoint\.com'
+rules = [{ subject = '.', event = "ignore" }]
 [[billers]]
 name = "Receipts"
 kind = "receipt"

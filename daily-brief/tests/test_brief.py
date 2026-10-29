@@ -171,6 +171,19 @@ class Tests(unittest.TestCase):
             self.assertNotIn(hidden, tg)
         self.assertIn("email", tg.lower())               # points to the full version
 
+    def test_muted_senders_and_bills_are_one_followup_line(self):
+        noisy = [msg("t1", "TurboTax@em1.turbotax.intuit.com", "Final Notice: Your tax filing status"),
+                 msg("t2", "notifications@chargepoint.com", "Quick payment update required before your next charge")]
+        out = self.run_out(FakeGoogle(MAIN + noisy))
+        email, tg = out.split("--- telegram preview ---")
+        for gone in ("Final Notice", "tax filing", "payment update"):
+            self.assertNotIn(gone, out)
+        self.assertIn("Chase ($40.00", email)                  # email: who, amount and due date
+        self.assertIn("Conservice", email)
+        self.assertIn("Chase", tg)                             # Telegram: just who to follow up with
+        self.assertIn("Conservice", tg)
+        self.assertNotIn("$40.00", tg)
+
     def test_paid_settles_due(self):
         paid = msg("c9", "noreplyalerts@chase.com", "We've received your Sample Visa payment", day=28)
         self.assertNotIn("$40.00", self.run_text(FakeGoogle(MAIN + [paid])))

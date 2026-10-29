@@ -320,3 +320,16 @@ also_line = [
   "And for completeness: {items}.",
   "Lesser matters: {items}.",
 ]
+
+follow_up = [
+  "Follow up with {who}.",
+  "You'll want to follow up with {who}.",
+  "Bills to follow up on: {who}.",
+  "A word with {who} is in order.",
+  "Don't forget to follow up with {who}.",
+  "Loose ends on the money side: {who}.",
+  "Please follow up with {who}.",
+  "On the billing front, {who} want a follow-up.",
+  "Payments to chase: {who}.",
+  "Do circle back to {who}.",
+]

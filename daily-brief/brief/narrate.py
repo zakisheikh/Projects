@@ -129,6 +129,34 @@ class Narrator:
         key = "bill_due_amt" if amount else "bill_due_noamt"
         return self.v.say(key, who=who, amount=amount or "", when=when(m.due, self.today), auto=auto)
 
+    def followups(self, b):
+        """One entry per biller needing action, most urgent first: dues soon, dues later, newly arrived bills."""
+        seen, out = set(), []
+        for m in list(b.dues_urgent) + list(b.dues_later) + list(b.bills):
+            who = m.biller or render.sender_name(m)
+            if who in seen:
+                continue
+            seen.add(who)
+            bits = []
+            if m.amount:
+                bits.append(m.amount)
+            if m.due:
+                bits.append(("overdue since " if m.due < self.today else "due ") + when(m.due, self.today))
+            if m.note == "autopay OFF":
+                bits.append("autopay off")
+            out.append((who, bits))
+        return out
+
+    def followup_sentence(self, b):
+        items = self.followups(b)
+        if not items:
+            return ""
+        if self.compact:
+            names = [w for w, _ in items]
+        else:
+            names = [w + (f" ({', '.join(bits)})" if bits else "") for w, bits in items]
+        return self.v.say("follow_up", who=join_list(self.capped(names)))
+
     def alert_sentence(self, m):
         return self.v.say("alert_item", who=m.biller or render.sender_name(m), subject=m.subject[:80].strip())
 
@@ -144,7 +172,9 @@ class Narrator:
         sentences = [v.say("account_fault", account=f.split(":")[0], why=f.split(":", 1)[-1].strip()[:80]) for f in b.failures]
         sentences += [self.hw_sentence(e) for e in b.hw_urgent]
         sentences += [self.hw_sentence(e, notice=True) for e in b.notice_urgent]
-        sentences += [self.bill_sentence(m) for m in b.dues_urgent]
+        follow = self.followup_sentence(b)
+        if follow and b.dues_urgent:
+            sentences.append(follow)
         sentences += [self.alert_sentence(m) for m in b.alerts]
         if sentences:
             shown = sentences[: self.caps["priority"]]
@@ -187,17 +217,11 @@ class Narrator:
                 items = [f"{self.hw_text(e)}, {when(e.start.date(), self.today)}" for e in b.notices_later]
                 out.append(v.say("notices_open", items=join_list(self.capped(items))))
 
-        # money
+        # money: bills are one follow-up line, wherever it belongs
         money = []
-        if b.dues_later:
-            if self.compact:
-                extras.append(plural(len(b.dues_later), "other payment") + " coming up")
-            else:
-                items = [f"{m.biller or render.sender_name(m)}, {m.amount + ' ' if m.amount else ''}by {when(m.due, self.today)}" for m in b.dues_later]
-                money.append(v.say("dues_open", items=join_list(self.capped(items))))
+        if follow and not b.dues_urgent:
+            money.append(follow)
         if not self.compact:
-            if b.bills:
-                money.append(v.say("bills_open", items=join_list(self.capped([self.mail_text(m) for m in b.bills]))))
             if b.paid:
                 items = [f"{m.biller or render.sender_name(m)}{', ' + m.amount if m.amount else ''}" for m in b.paid]
                 money.append(v.say("paid_open", items=join_list(self.capped(items))))
@@ -206,7 +230,8 @@ class Narrator:
                 if items:
                     money.append(v.say("balance_line", items=join_list(items)))
         if money:
-            out.append((v.maybe("transition_money", 0.6) + " " + " ".join(money)).strip())
+            lead = v.maybe("transition_money", 0.6)
+            out.append(((lead if len(money) > 1 else "") + " " + " ".join(money)).strip())
 
         # health
         if b.health:
@@ -220,7 +245,7 @@ class Narrator:
         # mail
         mail = []
         if self.compact:
-            n = len(b.important) + len(b.school) + len(b.logistics) + len(b.info) + len(b.bills)
+            n = len(b.important) + len(b.school) + len(b.logistics) + len(b.info)
             if n:
                 extras.append(plural(n, "message") + " worth a look")
         else:
@@ -231,7 +256,8 @@ class Narrator:
                 sources = join_list(sorted({render.sender_name(m) for m in b.receipts})[:4])
                 mail.append(v.say("receipts_line" if len(b.receipts) > 1 else "receipt_one", n=len(b.receipts), sources=sources))
         if mail:
-            out.append((v.maybe("transition_mail", 0.6) + " " + " ".join(mail)).strip())
+            lead = v.maybe("transition_mail", 0.6)
+            out.append(((lead if len(mail) > 1 else "") + " " + " ".join(mail)).strip())
 
         if self.compact:
             if extras:
