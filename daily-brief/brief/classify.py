@@ -6,7 +6,7 @@ MONTHS = "jan feb mar apr may jun jul aug sep oct nov dec".split()
 AMOUNT_KEYS = ["total current charges", "amount you owe", "amount due", "total due", "balance due",
                "minimum payment due", "minimum payment", "payment amount", "current charges", "payment due"]
 ANY_AMOUNT = re.compile(r"\$\s?([\d,]+\.\d{2})")
-DUE = re.compile(r"(?i)\bdue(?: on| by| date)?[:\s|]+(?:[a-z]{3,9},?\s+)?"
+DUE = re.compile(r"(?i)\bdue(?: on| by| date)?(?:\s+is)?[:\s|]+(?:[a-z]{3,9},?\s+)?"
                  r"(?:(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?|([a-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?)")
 REL = re.compile(r"(?i)\bdue (today|tomorrow)\b(?:,?\s+([a-z]{3,9})\.?\s+(\d{1,2}))?")
 AUTOPAY = re.compile(r"(?i)\bnon[- ]?auto ?pay\b|\bauto-?\s?pay(?:ment)?s?\s*[:\-|]?\s*(on|off)\b")

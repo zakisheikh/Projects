@@ -20,6 +20,7 @@ class Bundle:
     dues_later: list = field(default_factory=list)
     health: list = field(default_factory=list)
     bills: list = field(default_factory=list)
+    statements: list = field(default_factory=list)   # new statements that state no due date
     paid: list = field(default_factory=list)
     balances: list = field(default_factory=list)
     receipts: list = field(default_factory=list)
@@ -207,6 +208,9 @@ class Narrator:
         if follow and not b.dues_urgent:
             money.append(follow)
         if not self.compact:
+            if b.statements:
+                names = sorted({m.biller or render.sender_name(m) for m in b.statements})
+                money.append(v.say("statements_no_due", items=join_list(names)))
             if b.paid:
                 items = [f"{m.biller or render.sender_name(m)}{', ' + m.amount if m.amount else ''}" for m in b.paid]
                 money.append(v.say("paid_open", items=join_list(self.capped(items))))

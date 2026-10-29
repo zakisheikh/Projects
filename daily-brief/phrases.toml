@@ -302,3 +302,9 @@ homework_week = [
   "This week's coursework, {sir}: {items}.",
   "Homework to keep in view this week: {items}.",
 ]
+
+statements_no_due = [
+  "New statements arrived without a due date: {items}.",
+  "{items} sent statements but gave no due date. Worth a glance when you can.",
+  "Statements have landed from {items}; none states a due date.",
+]

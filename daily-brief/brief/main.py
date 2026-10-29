@@ -170,8 +170,12 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, trace=None):
 
     dues = sorted(open_bills, key=lambda m: m.due)
     b.failures = failures
+    end = today + timedelta(days=cfg["bills"].get("window_days", 14))
     b.dues_urgent = [m for m in dues if m.due <= soon]
-    b.dues_later = [m for m in dues if m.due > soon]
+    b.dues_later = [m for m in dues if soon < m.due <= end]      # beyond the window: not mentioned until it gets closer
+    for m in dues:
+        if m.due > end:
+            route[(m.account, m.id)] = f"hidden until within {cfg['bills'].get('window_days', 14)} days of its due date"
     b.alerts = [m for m in mails if is_alert(m)]
     for m in dues:
         route[(m.account, m.id)] = "Priority (payment due soon)" if m.due <= soon else "Later payments"
@@ -196,7 +200,12 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, trace=None):
     for m in candidates:
         if m.biller and settled(m):
             route[(m.account, m.id)] = "settled by a later payment notice"
-    b.bills = [m for m in candidates if not (m.biller and settled(m))]
+    open_cands = [m for m in candidates if not (m.biller and settled(m))]
+    b.bills = [m for m in open_cands if m.due and m.due <= end]
+    b.statements = [m for m in open_cands if not m.due]
+    for m in open_cands:
+        if m.due and m.due > end:
+            route[(m.account, m.id)] = "hidden until closer to its due date"
     b.paid = take(lambda m: m.event == "paid", "Payments confirmed")
     latest = {}
     for m in take(lambda m: m.event == "balance", "Balances (latest only)"):

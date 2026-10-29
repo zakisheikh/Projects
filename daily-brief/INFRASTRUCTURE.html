@@ -67,7 +67,7 @@
   <li><b>Morning (7:17am)</b>: what is urgent, then the calendar from now until the midday check (all-day items are announced here once), then homework for the week.</li>
   <li><b>Midday (12:17pm)</b>: what is urgent, then the rest of the day after noon, then homework for the week.</li>
   <li>So nothing is repeated twice in one day, and each brief answers "what is coming before the next one". A tomorrow preview at midday is available but off by default (<code>noon_tomorrow</code>).</li>
-  <li>Bills are a single follow-up line (names only on Telegram; amounts, due dates and autopay status in the email). TurboTax and ChargePoint are muted.</li>
+  <li>Bills are a single follow-up line, and only when due within the next two weeks (<code>window_days</code>); farther-out bills stay quiet until they get close. Names only on Telegram; amounts, due dates and autopay status in the email. Statements that state no due date are mentioned in the email only. TurboTax and ChargePoint are muted.</li>
 </ul>
 <h3>Style: Bruno talks, he doesn't print a form</h3>
 <p>There are no section headings and no emojis. Bruno speaks in short paragraphs, like a person: a greeting, what is urgent, what is left on your calendar, and one line for the minor stuff. About 240 lines of wording live in <code>phrases.toml</code> (greetings, day-of-the-week asides, ways of announcing a due payment, quips for busy or quiet days, sign-offs), and the next brief never repeats yesterday's pick for any of them.</p>

@@ -145,6 +145,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(classify.extract_due("your rent is due today, October 30th.", ref), date(2026, 10, 30))
         self.assertEqual(classify.extract_due("payment is due tomorrow", ref), date(2026, 10, 30))
         self.assertEqual(classify.extract_due("due Jan 5", date(2026, 12, 20)), date(2027, 1, 5))
+        self.assertEqual(classify.extract_due("Your payment due date is Dec 20, 2026.", ref), date(2026, 12, 20))
         self.assertIsNone(classify.extract_due("nothing", ref))
         self.assertEqual(classify.extract_autopay("Autopay Off"), "autopay OFF")
         self.assertEqual(classify.extract_autopay("Bill Due - NON auto pay"), "autopay OFF")
@@ -194,6 +195,17 @@ class Tests(unittest.TestCase):
         for text in (morning, noon):                   # homework for the week appears in both
             self.assertIn("Essay 2 for Databases (Tuesday)", text)
             self.assertIn("Final Project: Proposal for ML (tomorrow", text)
+
+    def test_bills_only_when_due_within_two_weeks(self):
+        far = msg("s1", "customerservice@servicing.synchrony.com", "Don't forget, your Visa payment is due soon",
+                  body="Your payment due date is Dec 20, 2026. Minimum payment due $25.00")
+        nodue = msg("f1", "fairwinds@member.fairwinds.org", "Your FAIRWINDS Credit Card statement is ready.")
+        out = self.run_out(FakeGoogle(MAIN + [far, nodue]))
+        email, tg = out.split("--- telegram preview ---")
+        self.assertNotIn("Synchrony", out)                    # due in 7 weeks: not mentioned yet
+        self.assertIn("Chase", tg)                            # due in 3 days: mentioned
+        self.assertIn("Fairwinds", email)                     # statement with no due date: email only
+        self.assertNotIn("Fairwinds", tg)
 
     def test_paid_settles_due(self):
         paid = msg("c9", "noreplyalerts@chase.com", "We've received your Sample Visa payment", day=28)
