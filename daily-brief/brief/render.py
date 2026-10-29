@@ -1,23 +1,36 @@
 from html import escape
 
 TITLES = {
-    "attention": "🚨 Needs attention",
-    "today": "📅 Rest of today",
-    "prayer": "🕌 Prayer times",
-    "tomorrow": "🌅 Tomorrow",
-    "homework": "📚 Homework later this week",
-    "notices": "📢 Class notices",
-    "dues": "💳 Upcoming payments (unpaid)",
-    "health": "🏥 Health & medical",
-    "bills": "📄 New bills & statements",
-    "paid": "✅ Payments confirmed",
-    "balances": "🏦 Card & bank balances",
-    "receipts": "🧾 Receipts",
-    "info": "ℹ️ Other account notices",
-    "school": "🎓 School mail",
-    "logistics": "✈️ Deliveries & travel",
-    "important": "✉️ Other important mail",
+    "attention": "Priority items",
+    "today": "Remaining schedule",
+    "prayer": "Prayer times",
+    "tomorrow": "Tomorrow",
+    "homework": "Coursework later this week",
+    "notices": "Class notices",
+    "dues": "Outstanding payments",
+    "health": "Health & medical",
+    "bills": "New bills & statements",
+    "paid": "Payments confirmed",
+    "balances": "Card & bank balances",
+    "receipts": "Receipts",
+    "info": "Other account notices",
+    "school": "School mail",
+    "logistics": "Deliveries & travel",
+    "important": "Other important mail",
 }
+EMOJI = {"attention": "🚨", "today": "📅", "prayer": "🕌", "tomorrow": "🌅", "homework": "📚", "notices": "📢",
+         "dues": "💳", "health": "🏥", "bills": "📄", "paid": "✅", "balances": "🏦", "receipts": "🧾",
+         "info": "ℹ️", "school": "🎓", "logistics": "✈️", "important": "✉️",
+         "HOMEWORK": "📚", "NOTICE": "📢", "DUE": "💳", "ALERT": "⚠️", "ACCOUNT": "🔑"}
+USE_EMOJI = False   # set from [style] emoji in config.toml; off by default
+
+
+def icon(key):
+    return f"{EMOJI[key]} " if USE_EMOJI and key in EMOJI else ""
+
+
+def title(key):
+    return icon(key) + TITLES[key]
 
 
 def fmt_time(ev):
@@ -69,10 +82,10 @@ def build(sections, header, greeting, closing, footer, leads):
         lead = leads.get(key, "")
         if not lines and not (key == "attention" and lead):
             continue
-        title = TITLES.get(key, key)
-        text += [title.upper()] + ([f"  {lead}"] if lead else []) + [f"  • {l}" for l in lines] + [""]
+        heading = title(key)
+        text += [heading.upper()] + ([f"  {lead}"] if lead else []) + [f"  • {l}" for l in lines] + [""]
         color = "#b3261e" if key == "attention" and lines else "#444"
-        html.append(f'<h3 style="margin:18px 0 4px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:{color}">{escape(title)}</h3>')
+        html.append(f'<h3 style="margin:18px 0 4px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:{color}">{escape(heading)}</h3>')
         if lead:
             html.append(f'<div style="color:#666;font-style:italic;margin-bottom:4px">{escape(lead)}</div>')
         if lines:

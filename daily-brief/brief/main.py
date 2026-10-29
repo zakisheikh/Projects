@@ -154,11 +154,11 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, multi=False, t
         return m.event == "alert" or "security" in m.categories or bool(m.categories and ALERT_WORDS.search(m.subject))
 
     dues = sorted(open_bills, key=lambda m: m.due)
-    attention = [f"🔑 ACCOUNT  {f}" for f in failures]
-    attention += ["📚 HOMEWORK  " + render.hw_line(e, aliases) for e in hw if e.start.date() <= tomorrow]
-    attention += ["📢 NOTICE  " + render.hw_line(e, aliases) for e in notices if e.hint and e.start.date() <= tomorrow]
-    attention += ["💳 DUE  " + bill_line(m) for m in dues if m.due <= soon]
-    attention += ["⚠️ ALERT  " + tag(render.mail_line(m, who=m.biller), m.account, multi) for m in mails if is_alert(m)]
+    attention = [f"{render.icon('ACCOUNT')}Account fault: {f}" for f in failures]
+    attention += [render.icon("HOMEWORK") + "Coursework due: " + render.hw_line(e, aliases) for e in hw if e.start.date() <= tomorrow]
+    attention += [render.icon("NOTICE") + "Notice: " + render.hw_line(e, aliases) for e in notices if e.hint and e.start.date() <= tomorrow]
+    attention += [render.icon("DUE") + "Payment due: " + bill_line(m) for m in dues if m.due <= soon]
+    attention += [render.icon("ALERT") + "Alert: " + tag(render.mail_line(m, who=m.biller), m.account, multi) for m in mails if is_alert(m)]
     for m in dues:
         route[(m.account, m.id)] = "Needs attention (due soon)" if m.due <= soon else "Upcoming payments"
     for m in mails:
@@ -208,12 +208,12 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, multi=False, t
                      ("Needs attention (due ≤ tomorrow)" if e.start.date() <= tomorrow else "Homework later this week") if e in hw else
                      "Class notices" if e in notices else
                      "not shown (already over, or outside the window)")
-            trace.append(("📅" if not e.homework else "📚", f"{e.calendar}", f"{e.title.strip()[:60]}", where))
+            trace.append(("cal" if not e.homework else "school", f"{e.calendar}", f"{e.title.strip()[:60]}", where))
         for m in dropped:
-            trace.append(("✉️", f"{m.account}: {render.sender_name(m)[:28]}", m.subject[:60], f"dropped by rule: {m.biller} → ignore"))
+            trace.append(("mail", f"{m.account}: {render.sender_name(m)[:28]}", m.subject[:60], f"dropped by rule: {m.biller} → ignore"))
         for m in mails:
             how = f"{m.biller}/{m.event}" if m.biller else (",".join(m.categories) or "no rule")
-            trace.append(("✉️", f"{m.account}: {render.sender_name(m)[:28]}", m.subject[:60],
+            trace.append(("mail", f"{m.account}: {render.sender_name(m)[:28]}", m.subject[:60],
                           f"{route.get((m.account, m.id), 'not shown (no section wanted it)')}   [matched: {how}]"))
     return sections
 
@@ -253,13 +253,13 @@ def telegram_blocks(sections, leads, redact_health):
     blocks = []
     for key, lines in sections:
         if key == "attention":
-            blocks.append((render.TITLES[key], leads.get(key, ""), lines))
+            blocks.append((render.title(key), leads.get(key, ""), lines))
         elif not lines or key in ("receipts", "info", "balances"):
             continue
         elif key == "health" and redact_health:
-            blocks.append((render.TITLES[key], "", [f"{len(lines)} item(s). Details are in your email."]))
+            blocks.append((render.title(key), "", [f"{len(lines)} item(s). Details are in your email."]))
         else:
-            blocks.append((render.TITLES[key], leads.get(key, ""), lines))
+            blocks.append((render.title(key), leads.get(key, ""), lines))
     return blocks
 
 
@@ -308,7 +308,9 @@ def run(argv=None, google=None, now=None):
     trace = [] if args.explain else None
     sections = assemble(events, mails, open_bills, failures, now, slot, cfg, multi=len(accounts) > 1, trace=trace)
     pcfg = cfg.get("persona", {})
-    voice = Voice.load(pcfg.get("name", "Bruno"), pcfg.get("user", ""), f"{now:%Y-%m-%d}-{slot}", st.get("phrases"))
+    render.USE_EMOJI = bool(cfg.get("style", {}).get("emoji", False))
+    voice = Voice.load(pcfg.get("name", "Bruno"), pcfg.get("user", ""), f"{now:%Y-%m-%d}-{slot}", st.get("phrases"),
+                       address=pcfg.get("address", "sir"))
     greeting = voice.say("greet_morning" if slot < 12 else "greet_noon")
     closing = voice.say("closing_morning" if slot < 12 else "closing_noon")
     leads = make_leads(voice, sections, True)

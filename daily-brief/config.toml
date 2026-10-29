@@ -6,6 +6,10 @@ recipient = ""           # empty = the primary account's own address
 [persona]
 name = "Bruno"           # who the messages come from (try "Jarvis"); wording lives in phrases.toml
 user = "Zaki"
+address = "sir"          # how he addresses you in phrases.toml ({sir})
+
+[style]
+emoji = false            # true adds section/line emojis
 
 [delivery]
 channels = ["telegram", "email"]   # each is tried independently; email is the full version

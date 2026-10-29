@@ -62,8 +62,8 @@
   <tr><td>7</td><td>🗣️ <b>Voice</b></td><td><code>phrases.toml</code></td><td>Bruno's greeting, lead-ins and sign-off are picked from the phrase banks, never the same twice in a row. Your data lines are not reworded.</td></tr>
   <tr><td>8</td><td>📨 <b>Send</b></td><td>The assembled brief</td><td>Telegram (short, health reduced to a count) and email (full). Then state is saved. Each channel is independent.</td></tr>
 </table>
-<h3>Emoji key</h3>
-<p>🚨 needs attention · 📅 calendar · 🕌 prayer times · 🌅 tomorrow · 📚 homework (Canvas) · 💳 unpaid / upcoming payment · 🏥 health · 📄 new bill or statement · ✅ payment confirmed · 🏦 balance · 🧾 receipts · 🎓 school mail · ✈️ travel &amp; deliveries · ✉️ other important mail · ⚠️ alert · 🔑 a Gmail login failed.</p>
+<h3>Style</h3>
+<p>Messages are plain text in Bruno's dry, courteous, Jarvis-like voice (“Good morning, sir…”, “Will there be anything else?”). Emojis are off; set <code>[style] emoji = true</code> in <code>config.toml</code> to turn on section icons. How he addresses you is <code>persona.address</code>.</p>
 <h3>See what happened to every input</h3>
 <p>Run <code>python3 -m brief --force --dry-run --explain</code> (or the workflow's dry run with that flag). After the message it prints one line per calendar event and email: <em>where it came from</em> (account or calendar), <em>which rule matched</em>, and <em>where it went</em> or <em>why it was dropped</em>. That is the tool for tuning the rules.</p>
 

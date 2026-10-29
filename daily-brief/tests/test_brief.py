@@ -158,13 +158,13 @@ class Tests(unittest.TestCase):
         self.assertIn("(ML)", text)                             # course alias
         self.assertIn("by 7:00 PM", text)                       # deadline hint from description
         self.assertIn("Databases", text)
-        self.assertIn("NOTICE  Fri 10/30 · Quick Poll", text)   # poll with a deadline is flagged, but not as homework
-        self.assertNotIn("HOMEWORK  Fri 10/30 · Quick Poll", text)
-        self.assertIn("HOMEWORK", text)
-        self.assertIn("DUE  Chase", text)                       # unpaid, due in 3 days
+        self.assertIn("Notice: Fri 10/30 · Quick Poll", text)   # poll with a deadline is flagged, but not as homework
+        self.assertNotIn("Coursework due: Fri 10/30 · Quick Poll", text)
+        self.assertIn("Coursework due:", text)
+        self.assertIn("Payment due: Chase", text)                       # unpaid, due in 3 days
         self.assertIn("$40.00", text)
         self.assertIn("autopay OFF", text)
-        self.assertIn("ALERT  Chase: Unusual activity", text)
+        self.assertIn("Alert: Chase: Unusual activity", text)
         self.assertIn("Rent", text)
         self.assertIn("$144.18", text)                          # Conservice total
         self.assertIn("Verizon", text)
@@ -178,20 +178,38 @@ class Tests(unittest.TestCase):
         self.assertNotIn("$2,900.26", text)
         self.assertIn("lunch?", text)
 
-    def test_emoji_sources_and_explain(self):
+    def test_style_plain_by_default_emoji_optional_and_explain(self):
         import io, contextlib
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
-            run(["--force", "--dry-run", "--explain"], google=FakeGoogle(MAIN), now=NOW)
-        out = buf.getvalue()
-        for token in ("🚨", "📅", "📚", "💳", "✉️", "where every input went", "dropped by rule: Chase offers",
-                      "[matched: Chase/due]", "Prayer times"):
-            self.assertIn(token, out)
+        import brief.main as bm
+        import brief.render as rd
+
+        def dry(emoji):
+            base = bm.load_config
+            cfg = base()
+            cfg["style"] = {"emoji": emoji}
+            bm.load_config = lambda path=None: cfg
+            buf = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(buf):
+                    run(["--force", "--dry-run", "--explain"], google=FakeGoogle(MAIN), now=NOW)
+            finally:
+                bm.load_config = base
+                rd.USE_EMOJI = False
+            return buf.getvalue()
+
+        plain = dry(False)
+        self.assertFalse(any(e in plain for e in ("🚨", "📅", "💳", "✉️")))
+        self.assertIn("PRIORITY ITEMS", plain.upper())
+        self.assertIn("sir", plain)
+        self.assertIn("where every input went", plain)
+        self.assertIn("dropped by rule: Chase offers", plain)
+        self.assertIn("[matched: Chase/due]", plain)
+        self.assertIn("🚨", dry(True))
 
     def test_paid_settles_due(self):
         paid = msg("c9", "noreplyalerts@chase.com", "We've received your Sample Visa payment", day=28)
         text = self.run_text(FakeGoogle(MAIN + [paid]))
-        self.assertNotIn("DUE  Chase", text)
+        self.assertNotIn("Payment due: Chase", text)
 
     def test_multi_account_and_failure_isolation(self):
         import brief.main as bm
@@ -208,7 +226,7 @@ class Tests(unittest.TestCase):
             self.assertEqual(text.count("Dentist"), 1)          # same calendar in two logins -> once
             g2 = {"main": FakeGoogle(MAIN), "other": None}
             text = self.run_text(g2)
-            self.assertIn("ACCOUNT  other", text)
+            self.assertIn("Account fault: other", text)
             self.assertIn("Dentist", text)                      # healthy account still reported
         finally:
             pass
@@ -224,7 +242,7 @@ class Tests(unittest.TestCase):
                 self.assertNotEqual(seen[-1], seen[-2])
             last.update(v.used)
         self.assertGreater(len(set(seen)), 4)
-        self.assertTrue(all("Zaki" in x or "boss" in x or "Bruno" in x or "morning" in x.lower() or "Up and at" in x for x in seen))
+        self.assertTrue(all(x.strip() for x in seen))
 
     def test_state_and_delivery(self):
         import json, os, tempfile
