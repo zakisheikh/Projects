@@ -152,7 +152,7 @@ class Tests(unittest.TestCase):
 
     def test_full_email_version(self):
         text = self.run_text(FakeGoogle(MAIN))
-        for must in ("Dentist at 3 PM", "Zuhr at 12:32 PM", "for ML", "7:00 PM", "Databases", "Quick Poll", "$40.00", "autopay",
+        for must in ("3:00pm · Dentist", "Zuhr at 12:32 PM", "(ML)", "7:00 PM", "Databases", "Quick Poll", "$40.00", "autopay",
                      "Unusual activity on your card", "$144.18", "Verizon", "$290.01", "Explanation of Benefits",
                      "2 receipts", "$3,628.15", "lunch?", "Rent"):
             self.assertIn(must, text, must)
@@ -193,8 +193,8 @@ class Tests(unittest.TestCase):
         self.assertIn("Dentist", noon)
         self.assertNotIn("Standup", noon)
         for text in (morning, noon):                   # homework for the week appears in both
-            self.assertIn("Essay 2 for Databases (Tuesday)", text)
-            self.assertIn("Final Project: Proposal for ML (tomorrow", text)
+            self.assertIn("Tue 11/3 · Essay 2 (Databases)", text)
+            self.assertIn("Fri 10/30 · Final Project: Proposal (ML)", text)
 
     def test_bills_only_when_due_within_two_weeks(self):
         far = msg("s1", "customerservice@servicing.synchrony.com", "Don't forget, your Visa payment is due soon",
@@ -230,7 +230,7 @@ class Tests(unittest.TestCase):
         self.assertIn("OVERDUE", text.upper())
         self.assertEqual(text.count("Dentist"), 1)               # same calendar in two logins -> once
         text = self.run_text({"main": FakeGoogle(MAIN), "other": None})
-        self.assertIn("other account", text)
+        self.assertIn("Account problem, other", text)
         self.assertIn("Dentist", text)                           # healthy account still reported
 
     def test_voice_varies_and_never_repeats(self):

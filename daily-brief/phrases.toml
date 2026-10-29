@@ -70,37 +70,16 @@ all_clear = [
   "The decks are clear, {sir}.",
   "No emergencies today. Remarkable.",
 ]
-notice_urgent = [
-  "{item} wants a response {when}{hint}.",
-  "Not an assignment, but {item} needs an answer {when}{hint}.",
-  "A class matter: {item}, closing {when}{hint}.",
-  "{item} closes {when}{hint}. Easy to forget.",
-  "Keep an eye on {item}. It closes {when}{hint}.",
-]
-alert_item = [
-  "{who} flagged something: \"{subject}\".",
-  "Something from {who} caught my eye: \"{subject}\".",
-  "{who} sent this, and I thought you'd want to see it: \"{subject}\".",
-  "A flag from {who}: \"{subject}\".",
-  "{who} says: \"{subject}\". Worth a look.",
-  "I don't love the sound of this one from {who}: \"{subject}\".",
-]
-account_fault = [
-  "I couldn't get into the {account} account ({why}), so it is missing from this report.",
-  "A fault with the {account} account, {sir}: {why}. Its mail and calendar are not included.",
-  "The {account} account is giving me trouble ({why}). I'll keep trying.",
-]
 
 # ---------------------------------------------------------------- schedule
 schedule_open = [
-  "On the calendar from here: {items}.",
-  "Your day, from here: {items}.",
-  "Today holds {items}.",
-  "What remains of your schedule: {items}.",
-  "As for the rest of today, you have {items}.",
-  "Looking at the calendar, I see {items}.",
-  "Your remaining engagements, {sir}: {items}.",
-  "The rest of the day goes like this: {items}.",
+  "Your day, from here:",
+  "On the calendar from here:",
+  "What remains of your schedule:",
+  "The rest of today, {sir}:",
+  "Looking at the calendar, I see:",
+  "Your remaining engagements, {sir}:",
+  "The rest of the day goes like this:",
 ]
 schedule_empty = [
   "Your calendar is clear for the remainder of the day, {sir}.",
@@ -128,11 +107,10 @@ prayer_line = [
   "Your prayer times: {items}.",
 ]
 tomorrow_open = [
-  "Looking ahead to tomorrow: {items}.",
-  "Tomorrow, you have {items}.",
-  "A glance at tomorrow, {sir}: {items}.",
-  "So that tomorrow holds no surprises: {items}.",
-  "Tomorrow's agenda: {items}.",
+  "Looking ahead to tomorrow:",
+  "A glance at tomorrow, {sir}:",
+  "So that tomorrow holds no surprises:",
+  "Tomorrow's agenda:",
 ]
 
 # ---------------------------------------------------------------- coursework
@@ -143,32 +121,23 @@ homework_none = [
   "No coursework deadlines are approaching.",
 ]
 notices_open = [
-  "A few class announcements, not assignments: {items}.",
-  "From your classes, {sir}: {items}.",
-  "Course administration worth a glance: {items}.",
-  "Some class business: {items}.",
+  "A few class announcements, not assignments:",
+  "From your classes, {sir}:",
+  "Course administration worth a glance:",
+  "Some class business:",
 ]
 
 # ---------------------------------------------------------------- money
-transition_money = [
-  "Now, the bills.",
-  "Turning to money.",
-  "On to the finances.",
-  "As for the ledger:",
-  "A word on money.",
-  "Financially speaking:",
-]
 paid_open = [
-  "On the bright side, these payments cleared: {items}.",
-  "For the record, these are settled: {items}.",
-  "Confirmed paid: {items}.",
-  "Good news, {sir}. The following went through: {items}.",
+  "On the bright side, these payments cleared:",
+  "For the record, these are settled:",
+  "Confirmed paid:",
+  "Good news, {sir}. The following went through:",
 ]
 balance_line = [
-  "For reference, {items}.",
-  "Your balances stand at {items}.",
-  "Quick check of the balances: {items}.",
-  "On the balance front, {items}.",
+  "For reference, your balances:",
+  "Quick check of the balances:",
+  "On the balance front:",
 ]
 receipts_line = [
   "{n} receipts came in, from {sources}. Filed and forgotten.",
@@ -181,42 +150,35 @@ receipt_one = [
 ]
 
 # ---------------------------------------------------------------- mail
-transition_mail = [
-  "Now, the inbox.",
-  "As for correspondence:",
-  "Turning to mail.",
-  "On to the inbox.",
-  "A word on your mail:",
-]
 health_redacted = [
   "There's medical correspondence waiting: {thing}. The details are in your email.",
   "I have {thing} for you. I'll keep the specifics for your email.",
   "Health paperwork: {thing}. Details by email, for discretion's sake.",
 ]
 health_open = [
-  "On the health front: {items}.",
-  "Medical correspondence has arrived: {items}.",
-  "Health paperwork, {sir}: {items}.",
+  "On the health front:",
+  "Medical correspondence has arrived:",
+  "Health paperwork, {sir}:",
 ]
 school_open = [
-  "From your schools: {items}.",
-  "School mail worth a look: {items}.",
+  "From your schools:",
+  "School mail worth a look:",
 ]
 logistics_open = [
-  "On the travel and delivery front: {items}.",
-  "Logistics, {sir}: {items}.",
-  "Regarding your travels and deliveries: {items}.",
+  "On the travel and delivery front:",
+  "Logistics, {sir}:",
+  "Regarding your travels and deliveries:",
 ]
 info_open = [
-  "A few account notices: {items}.",
-  "Some account housekeeping: {items}.",
+  "A few account notices:",
+  "Some account housekeeping:",
 ]
 mail_open = [
-  "Mail I thought you'd want to see: {items}.",
-  "Worth opening: {items}.",
-  "Messages of note: {items}.",
-  "Among the rest of the inbox: {items}.",
-  "You may want to read: {items}.",
+  "Mail I thought you'd want to see:",
+  "Worth opening:",
+  "Messages of note:",
+  "Among the rest of the inbox:",
+  "You may want to read:",
 ]
 more_items = ["and {k} more", "plus {k} others", "and {k} besides"]
 
@@ -278,14 +240,14 @@ follow_up = [
 
 # ---------------------------------------------------------------- the two briefings
 schedule_morning_open = [
-  "Between now and my midday check-in: {items}.",
-  "Until I report again at noon, you have {items}.",
-  "Your morning, in order: {items}.",
-  "From now until midday: {items}.",
-  "Before my next report at noon: {items}.",
-  "The morning looks like this: {items}.",
-  "Between now and lunch, {sir}: {items}.",
-  "On the docket until midday: {items}.",
+  "Between now and my midday check-in:",
+  "Until I report again at noon:",
+  "Your morning, in order:",
+  "From now until midday:",
+  "Before my next report at noon:",
+  "The morning looks like this:",
+  "Between now and lunch, {sir}:",
+  "On the docket until midday:",
 ]
 schedule_morning_empty = [
   "Nothing on the calendar before midday, {sir}. The morning is yours.",
@@ -294,13 +256,13 @@ schedule_morning_empty = [
   "A free morning. I'd make use of it.",
 ]
 homework_week = [
-  "Coursework this week: {items}.",
-  "On the homework front this week: {items}.",
-  "For the week, school-wise: {items}.",
-  "Your assignments this week, soonest first: {items}.",
-  "Academic deadlines for the week: {items}.",
-  "This week's coursework, {sir}: {items}.",
-  "Homework to keep in view this week: {items}.",
+  "Coursework this week:",
+  "On the homework front this week:",
+  "Your assignments this week, soonest first:",
+  "Academic deadlines for the week:",
+  "This week's coursework, {sir}:",
+  "Homework to keep in view:",
+  "School, this week:",
 ]
 
 statements_no_due = [

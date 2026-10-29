@@ -1,3 +1,4 @@
+import re
 from html import escape
 
 def fmt_time(ev):
@@ -19,9 +20,10 @@ def course_name(tag, aliases):
 
 def hw_line(ev, aliases):
     when = ev.start.strftime("%a %-m/%-d")
+    title = re.sub(r"\s*\((classic|new)\)\s*$", "", ev.title.strip(), flags=re.I)
     course = f" ({course_name(ev.course, aliases)})" if ev.course else ""
     hint = f"  {ev.hint}" if ev.hint else ""
-    return f"{when} · {ev.title.strip()}{course}{hint}"
+    return f"{when} · {title}{course}{hint}"
 
 
 def sender_name(m):

@@ -68,6 +68,10 @@ def plural(n, noun):
     return f"{n} {noun}" + ("" if n == 1 else "s")
 
 
+def bullets(lead, items):
+    return lead + "\n" + "\n".join(f"• {i}" for i in items)
+
+
 def place(loc):
     """A short spoken place: the parenthetical abbreviation if there is one, else the first part cut at a word."""
     if not loc or not loc.strip():
@@ -92,17 +96,11 @@ class Narrator:
     # ---- phrase helpers
     def event_text(self, e):
         where = f" ({place(e.location)})" if place(e.location) else ""
-        if e.all_day:
-            return f"{e.title.strip()} (all day){where}"
-        return f"{e.title.strip()} at {clock(e.start)}{where}"
+        stamp = "all day" if e.all_day else e.start.strftime("%-I:%M%p").lower()
+        return f"{stamp} · {e.title.strip()}{where}"
 
-    def hw_text(self, e):
-        course = render.course_name(e.course, self.aliases) if e.course else ""
-        title = re.sub(r"\s*\((classic|new)\)\s*$", "", e.title.strip(), flags=re.I)
-        return title + (f" for {course}" if course else "")
-
-    def mail_text(self, m):
-        return f"{m.biller or render.sender_name(m)} (\"{m.subject[:60].strip()}\")"
+    def mail_line(self, m):
+        return f"{m.biller or render.sender_name(m)}: {m.subject[:70].strip()}"
 
     def capped(self, items, key="list"):
         n = self.caps[key]
@@ -112,10 +110,8 @@ class Narrator:
         return items[:n] + [self.v.say("more_items", k=k)]
 
     # ---- sentences for individual items
-    def hw_sentence(self, e, notice=False):
-        d = e.start.date()
-        return self.v.say("notice_urgent", item=self.hw_text(e),
-                          when=when(d, self.today), hint=f" {e.hint}" if e.hint else "")
+    def notice_bullet(self, e):
+        return render.hw_line(e, self.aliases)
 
     def followups(self, b):
         """One entry per biller needing action, most urgent first: dues soon, dues later, newly arrived bills."""
@@ -145,8 +141,8 @@ class Narrator:
             names = [w + (f" ({', '.join(bits)})" if bits else "") for w, bits in items]
         return self.v.say("follow_up", who=join_list(self.capped(names)))
 
-    def alert_sentence(self, m):
-        return self.v.say("alert_item", who=m.biller or render.sender_name(m), subject=m.subject[:80].strip())
+    def alert_bullet(self, m):
+        return f"{m.biller or render.sender_name(m)}: {m.subject[:80].strip()}"
 
     # ---- the brief
     def paragraphs(self, b, slot, now):
@@ -157,17 +153,17 @@ class Narrator:
             out[-1] += " " + aside
 
         # priority items, most urgent first
-        sentences = [v.say("account_fault", account=f.split(":")[0], why=f.split(":", 1)[-1].strip()[:80]) for f in b.failures]
-        sentences += [self.hw_sentence(e, notice=True) for e in b.notice_urgent]
         follow = self.followup_sentence(b)
+        urgent = [f"Account problem, {f.split(':')[0]}: {f.split(':', 1)[-1].strip()[:80]}" for f in b.failures]
+        urgent += [self.notice_bullet(e) for e in b.notice_urgent]
         if follow and b.dues_urgent:
-            sentences.append(follow)
-        sentences += [self.alert_sentence(m) for m in b.alerts]
-        if sentences:
-            shown = sentences[: self.caps["priority"]]
-            out.append(v.say("priority_open") + "\n" + "\n".join(shown))
-            if len(sentences) > len(shown):
-                out[-1] += "\n" + v.say("more_priority", k=len(sentences) - len(shown))
+            urgent.append(follow)
+        urgent += [f"Alert, {self.alert_bullet(m)}" for m in b.alerts]
+        if urgent:
+            shown = urgent[: self.caps["priority"]]
+            if len(urgent) > len(shown):
+                shown.append(v.say("more_priority", k=len(urgent) - len(shown)))
+            out.append(bullets(v.say("priority_open"), shown))
         else:
             out.append(v.say("all_clear"))
 
@@ -177,9 +173,9 @@ class Narrator:
             items = [self.event_text(e) for e in evs[: self.caps["events"]]]
             if len(evs) > self.caps["events"]:
                 items.append(v.say("more_items", k=len(evs) - self.caps["events"]))
-            para = v.say("schedule_morning_open" if slot < 12 else "schedule_open", items=join_list(items))
+            para = bullets(v.say("schedule_morning_open" if slot < 12 else "schedule_open"), items)
             if len(evs) >= 5 and not self.compact:
-                para += " " + v.say("quip_busy")
+                para += "\n" + v.say("quip_busy")
             out.append(para)
         else:
             out.append(v.say("schedule_morning_empty" if slot < 12 else "schedule_empty"))
@@ -187,40 +183,32 @@ class Narrator:
             out.append(v.say("prayer_line", items=join_list([f"{e.title} at {clock(e.start)}" for e in b.prayer])))
         if b.tomorrow and slot >= 12 and self.show_tomorrow:
             items = self.capped([self.event_text(e) for e in b.tomorrow], "events" if self.compact else "list")
-            out.append(v.say("tomorrow_open", items=join_list(items)))
+            out.append(bullets(v.say("tomorrow_open"), items))
 
         extras = []   # compact mode folds the minor stuff into a single closing line
         # coursework for the week, soonest first (the same in both briefs)
         if b.hw_week:
-            items = []
-            for e in sorted(b.hw_week, key=lambda e: e.start):
-                tail = when(e.start.date(), self.today) + (f", {e.hint}" if e.hint and e.start.date() <= self.today + timedelta(days=1) else "")
-                items.append(f"{self.hw_text(e)} ({tail})")
-            out.append(v.say("homework_week", items=join_list(self.capped(items, "week"))))
+            items = [render.hw_line(e, self.aliases) for e in sorted(b.hw_week, key=lambda e: e.start)]
+            out.append(bullets(v.say("homework_week"), self.capped(items, "week")))
         elif not b.any_homework:
             out.append(v.say("homework_none"))
         if b.notices_later and not self.compact:
-            items = [f"{self.hw_text(e)}, {when(e.start.date(), self.today)}" for e in b.notices_later]
-            out.append(v.say("notices_open", items=join_list(self.capped(items))))
+            items = [render.hw_line(e, self.aliases) for e in b.notices_later]
+            out.append(bullets(v.say("notices_open"), self.capped(items)))
 
         # money: bills are one follow-up line, wherever it belongs
-        money = []
         if follow and not b.dues_urgent:
-            money.append(follow)
+            out.append(follow)
         if not self.compact:
             if b.statements:
                 names = sorted({m.biller or render.sender_name(m) for m in b.statements})
-                money.append(v.say("statements_no_due", items=join_list(names)))
+                out.append(v.say("statements_no_due", items=join_list(names)))
             if b.paid:
-                items = [f"{m.biller or render.sender_name(m)}{', ' + m.amount if m.amount else ''}" for m in b.paid]
-                money.append(v.say("paid_open", items=join_list(self.capped(items))))
-            if b.balances:
-                items = [f"{m.biller} at {m.amount}" for m in b.balances if m.amount]
-                if items:
-                    money.append(v.say("balance_line", items=join_list(items)))
-        if money:
-            lead = v.maybe("transition_money", 0.6)
-            out.append(((lead if len(money) > 1 else "") + " " + " ".join(money)).strip())
+                items = [f"{m.biller or render.sender_name(m)}{' · ' + m.amount if m.amount else ''}" for m in b.paid]
+                out.append(bullets(v.say("paid_open"), self.capped(items)))
+            items = [f"{m.biller} · {m.amount}" for m in b.balances if m.amount]
+            if items:
+                out.append(bullets(v.say("balance_line"), items))
 
         # health
         if b.health:
@@ -229,24 +217,20 @@ class Narrator:
             elif self.redact:
                 out.append(v.say("health_redacted", thing=plural(len(b.health), "medical item")))
             else:
-                out.append(v.say("health_open", items=join_list(self.capped([self.mail_text(m) for m in b.health]))))
+                out.append(bullets(v.say("health_open"), self.capped([self.mail_line(m) for m in b.health])))
 
         # mail
-        mail = []
         if self.compact:
-            n = len(b.important) + len(b.school) + len(b.logistics) + len(b.info)
-            if n:
-                extras.append(plural(n, "message") + " worth a look")
+            n_other = len(b.important) + len(b.school) + len(b.logistics) + len(b.info)
+            if n_other:
+                extras.append(plural(n_other, "message") + " worth a look")
         else:
             for key, items in (("school_open", b.school), ("logistics_open", b.logistics), ("info_open", b.info), ("mail_open", b.important)):
                 if items:
-                    mail.append(v.say(key, items=join_list(self.capped([self.mail_text(m) for m in items]))))
+                    out.append(bullets(v.say(key), self.capped([self.mail_line(m) for m in items])))
             if b.receipts:
                 sources = join_list(sorted({render.sender_name(m) for m in b.receipts})[:4])
-                mail.append(v.say("receipts_line" if len(b.receipts) > 1 else "receipt_one", n=len(b.receipts), sources=sources))
-        if mail:
-            lead = v.maybe("transition_mail", 0.6)
-            out.append(((lead if len(mail) > 1 else "") + " " + " ".join(mail)).strip())
+                out.append(v.say("receipts_line" if len(b.receipts) > 1 else "receipt_one", n=len(b.receipts), sources=sources))
 
         if self.compact:
             if extras:
