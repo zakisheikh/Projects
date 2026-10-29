@@ -38,6 +38,7 @@ State (last send time, reported mail ids, last phrases, run lateness) lives in `
 ```
 export GOOGLE_CLIENT_ID=… GOOGLE_CLIENT_SECRET=… GOOGLE_REFRESH_TOKEN=…
 python3 -m brief --force --dry-run --state /tmp/state.json
+python3 -m brief --force --dry-run --explain --state /tmp/state.json   # shows where every input went
 python3 -m unittest discover -s tests -t .
 ```
 

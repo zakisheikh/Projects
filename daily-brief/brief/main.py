@@ -110,7 +110,7 @@ def tag(line, account, multi):
     return f"[{account}] {line}" if multi and account else line
 
 
-def assemble(events, mails, open_bills, failures, now, slot, cfg, multi=False):
+def assemble(events, mails, open_bills, failures, now, slot, cfg, multi=False, trace=None):
     today, n = now.date(), cfg["mail"]["max_per_section"]
     tomorrow = today + timedelta(days=1)
     horizon = today + timedelta(days=cfg["calendar"]["lookahead_days"])
@@ -137,7 +137,9 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, multi=False):
     prayer = [e for e in live if e.compact and not e.all_day]
     nxt = [e for e in uniq if on(e, tomorrow) and not e.compact and not e.homework]
     hw = [e for e in uniq if e.homework and today <= e.start.date() <= horizon]
+    dropped = [m for m in mails if m.ignored]
     mails = [m for m in mails if not m.ignored]
+    route = {}   # (account, id) -> where the mail went, for --explain
 
     def bill_line(m):
         return tag(render.mail_line(m, who=m.biller), m.account, multi)
@@ -146,32 +148,39 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, multi=False):
         return m.event == "alert" or "security" in m.categories or bool(m.categories and ALERT_WORDS.search(m.subject))
 
     dues = sorted(open_bills, key=lambda m: m.due)
-    attention = [f"ACCOUNT  {f}" for f in failures]
-    attention += ["HOMEWORK  " + render.hw_line(e, aliases) for e in hw if e.start.date() <= tomorrow]
-    attention += ["DUE  " + bill_line(m) for m in dues if m.due <= soon]
-    attention += ["ALERT  " + tag(render.mail_line(m, who=m.biller), m.account, multi) for m in mails if is_alert(m)]
+    attention = [f"🔑 ACCOUNT  {f}" for f in failures]
+    attention += ["📚 HOMEWORK  " + render.hw_line(e, aliases) for e in hw if e.start.date() <= tomorrow]
+    attention += ["💳 DUE  " + bill_line(m) for m in dues if m.due <= soon]
+    attention += ["⚠️ ALERT  " + tag(render.mail_line(m, who=m.biller), m.account, multi) for m in mails if is_alert(m)]
+    for m in dues:
+        route[(m.account, m.id)] = "Needs attention (due soon)" if m.due <= soon else "Upcoming payments"
+    for m in mails:
+        if is_alert(m):
+            route[(m.account, m.id)] = "Needs attention (alert)"
 
     # Anything already listed above must not repeat in the per-category sections.
     shown = {(m.account, m.id) for m in dues} | {(m.account, m.id) for m in mails if is_alert(m)}
 
-    def take(pred):
+    def take(pred, section):
         items = [m for m in mails if (m.account, m.id) not in shown and pred(m)]
         shown.update((m.account, m.id) for m in items)
+        for m in items:
+            route[(m.account, m.id)] = section
         return items
 
-    health = take(lambda m: m.kind == "health" or "health" in m.categories)
-    statements = take(lambda m: m.event in ("statement", "due") or ("bill" in m.categories) or ("card" in m.categories))
-    paid = take(lambda m: m.event == "paid")
+    health = take(lambda m: m.kind == "health" or "health" in m.categories, "Health")
+    statements = take(lambda m: m.event in ("statement", "due") or ("bill" in m.categories) or ("card" in m.categories), "New bills & statements")
+    paid = take(lambda m: m.event == "paid", "Payments confirmed")
     bal = {}
-    for m in take(lambda m: m.event == "balance"):
+    for m in take(lambda m: m.event == "balance", "Balances (latest only)"):
         k = (m.account, m.biller)
         if k not in bal or m.when > bal[k].when:
             bal[k] = m
-    receipts = take(lambda m: m.event == "receipt" or "receipt" in m.categories)
-    school = take(lambda m: "school" in m.categories)
-    logistics = take(lambda m: "logistics" in m.categories)
-    infos = take(lambda m: m.event == "info")
-    important = take(lambda m: m.important and m.unread)
+    receipts = take(lambda m: m.event == "receipt" or "receipt" in m.categories, "Receipts (counted)")
+    school = take(lambda m: "school" in m.categories, "School mail")
+    logistics = take(lambda m: "logistics" in m.categories, "Deliveries & travel")
+    infos = take(lambda m: m.event == "info", "Other account notices")
+    important = take(lambda m: m.important and m.unread, "Other important mail")
 
     L = lambda items: [tag(render.mail_line(m, who=m.biller), m.account, multi) for m in items[:n]]
     sections = [("attention", attention),
@@ -185,6 +194,18 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, multi=False):
                 ("school", L(school)), ("logistics", L(logistics)),
                 ("receipts", [f"{len(receipts)} receipt(s): " + ", ".join(sorted({render.sender_name(m) for m in receipts})[:6])] if receipts else []),
                 ("info", L(infos)), ("important", L(important))]
+    if trace is not None:
+        for e in uniq:
+            where = ("Prayer times" if e in prayer else "Rest of today" if e in rest else "Tomorrow" if e in nxt else
+                     ("Needs attention (due ≤ tomorrow)" if e.start.date() <= tomorrow else "Homework later this week") if e in hw else
+                     "not shown (already over, or outside the window)")
+            trace.append(("📅" if not e.homework else "📚", f"{e.calendar}", f"{e.title.strip()[:60]}", where))
+        for m in dropped:
+            trace.append(("✉️", f"{m.account}: {render.sender_name(m)[:28]}", m.subject[:60], f"dropped by rule: {m.biller} → ignore"))
+        for m in mails:
+            how = f"{m.biller}/{m.event}" if m.biller else (",".join(m.categories) or "no rule")
+            trace.append(("✉️", f"{m.account}: {render.sender_name(m)[:28]}", m.subject[:60],
+                          f"{route.get((m.account, m.id), 'not shown (no section wanted it)')}   [matched: {how}]"))
     return sections
 
 
@@ -238,6 +259,7 @@ def run(argv=None, google=None, now=None):
     ap.add_argument("--force", action="store_true", help="ignore the slot schedule")
     ap.add_argument("--dry-run", action="store_true", help="print instead of sending")
     ap.add_argument("--config")
+    ap.add_argument("--explain", action="store_true", help="also print where every input came from and where it went")
     ap.add_argument("--state", help="path to state.json (kept on the brief-state branch in CI)")
     args = ap.parse_args(argv)
     cfg = load_config(args.config)
@@ -274,7 +296,8 @@ def run(argv=None, google=None, now=None):
         except Exception as ex:   # one broken login must not silence the others
             failures.append(f"{name}: {str(ex)[:160]}")
 
-    sections = assemble(events, mails, open_bills, failures, now, slot, cfg, multi=len(accounts) > 1)
+    trace = [] if args.explain else None
+    sections = assemble(events, mails, open_bills, failures, now, slot, cfg, multi=len(accounts) > 1, trace=trace)
     pcfg = cfg.get("persona", {})
     voice = Voice.load(pcfg.get("name", "Bruno"), pcfg.get("user", ""), f"{now:%Y-%m-%d}-{slot}", st.get("phrases"))
     greeting = voice.say("greet_morning" if slot < 12 else "greet_noon")
@@ -283,12 +306,20 @@ def run(argv=None, google=None, now=None):
     label = "Morning" if slot < 12 else "Midday"
     header = f"{label} brief — {now:%a %b %-d}"
     unread = sum(m.unread for m in mails)
-    footer = f"{len(mails)} new emails across {len(accounts)} account(s) since {since:%a %-I%p} ({unread} unread). Rules only, no AI."
+    n_hw = len({(e.title, e.start) for e in events if e.homework})
+    n_cal = len({e.calendar for e in events})
+    footer = (f"Sources: ✉️ {len(mails)} new emails ({unread} unread) from {len(accounts)} Gmail account(s) since {since:%a %-I%p} · "
+              f"📅 {len({(e.title, e.start, e.end) for e in events})} events from {n_cal} calendar(s) · 📚 {n_hw} Canvas/homework items · "
+              f"💳 {len(open_bills)} unpaid bills tracked. Rules only, no AI.")
     text, html = render.build(sections, header, greeting, closing, footer, leads)
-    tg = telegram.fmt(greeting, telegram_blocks(sections, leads, cfg["delivery"].get("telegram_redact_health", True)), closing)
+    tg = telegram.fmt(greeting, telegram_blocks(sections, leads, cfg["delivery"].get("telegram_redact_health", True)), closing, footer)
 
     if args.dry_run:
         print(text)
+        if trace is not None:
+            print("\n--- where every input went ---")
+            for icon, src, what, where in trace:
+                print(f"{icon} {src} | {what}\n     → {where}")
         print("\n--- telegram preview ---\n" + tg.replace("<b>", "").replace("</b>", "").replace("<i>", "").replace("</i>", ""))
         return 0
 

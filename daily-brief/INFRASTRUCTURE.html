@@ -49,6 +49,24 @@
   <div class="card"><b>Cost</b>$0. Telegram, GitHub Actions and Gmail/Calendar APIs are all free at this volume.</div>
 </div>
 
+<h2>0. How it works, from trigger to text</h2>
+<p>Every brief follows the same eight steps. Nothing in it is guessed by an AI; each step is a rule you can read.</p>
+<table>
+  <tr><th>#</th><th>Step</th><th>Where the input comes from</th><th>What happens to it</th></tr>
+  <tr><td>1</td><td>⏰ <b>Trigger</b></td><td>GitHub's scheduler, at 7:17 and 12:17 Pacific (a second, off-season copy exits immediately)</td><td>Starts a short-lived Linux machine. Nothing of yours is involved.</td></tr>
+  <tr><td>2</td><td>🧠 <b>Memory</b></td><td><code>state.json</code> on the <code>brief-state</code> branch</td><td>Tells the job when the last brief went out, which mail it already reported, and which phrases it used last time.</td></tr>
+  <tr><td>3</td><td>📅 <b>Calendar</b></td><td>Google Calendar API, every calendar of every account: your main one, Joint Ops, Prayer Times, the three Canvas feeds</td><td>Events are merged (duplicates removed), then sorted: Canvas items → homework; Prayer Times → one line; the Moon calendar is dropped.</td></tr>
+  <tr><td>4</td><td>✉️ <b>Mail</b></td><td>Gmail API, each account, mail since the last brief (spam, Promotions and Social tabs excluded)</td><td>Each message is matched against the biller list by sender, then subject. A match becomes an event type (due, statement, paid, balance, alert, receipt, ignore). No match falls to keyword rules.</td></tr>
+  <tr><td>5</td><td>💳 <b>Bills</b></td><td>Gmail again: the last 40 days of "payment due" notices</td><td>A due notice stays on the list until a later "payment received" from the same biller settles it. Amounts, due dates and autopay status are read from the message body.</td></tr>
+  <tr><td>6</td><td>🧩 <b>Assemble</b></td><td>Everything above</td><td>Routed into sections, each item listed once: 🚨 attention → 📅 today → 📚 homework → 💳 payments → 🏥 health → ✉️ other mail.</td></tr>
+  <tr><td>7</td><td>🗣️ <b>Voice</b></td><td><code>phrases.toml</code></td><td>Bruno's greeting, lead-ins and sign-off are picked from the phrase banks, never the same twice in a row. Your data lines are not reworded.</td></tr>
+  <tr><td>8</td><td>📨 <b>Send</b></td><td>The assembled brief</td><td>Telegram (short, health reduced to a count) and email (full). Then state is saved. Each channel is independent.</td></tr>
+</table>
+<h3>Emoji key</h3>
+<p>🚨 needs attention · 📅 calendar · 🕌 prayer times · 🌅 tomorrow · 📚 homework (Canvas) · 💳 unpaid / upcoming payment · 🏥 health · 📄 new bill or statement · ✅ payment confirmed · 🏦 balance · 🧾 receipts · 🎓 school mail · ✈️ travel &amp; deliveries · ✉️ other important mail · ⚠️ alert · 🔑 a Gmail login failed. The last line of every message lists the sources: ✉️ how many emails from how many accounts, 📅 events from how many calendars, 📚 Canvas items, 💳 bills tracked.</p>
+<h3>See what happened to every input</h3>
+<p>Run <code>python3 -m brief --force --dry-run --explain</code> (or the workflow's dry run with that flag). After the message it prints one line per calendar event and email: <em>where it came from</em> (account or calendar), <em>which rule matched</em>, and <em>where it went</em> or <em>why it was dropped</em>. That is the tool for tuning the rules.</p>
+
 <h2>1. Architecture</h2>
 <svg viewBox="0 0 860 330" role="img" aria-label="Architecture diagram">
   <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8a8a92"/></marker></defs>

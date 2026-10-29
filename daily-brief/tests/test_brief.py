@@ -174,6 +174,16 @@ class Tests(unittest.TestCase):
         self.assertNotIn("$2,900.26", text)
         self.assertIn("lunch?", text)
 
+    def test_emoji_sources_and_explain(self):
+        import io, contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            run(["--force", "--dry-run", "--explain"], google=FakeGoogle(MAIN), now=NOW)
+        out = buf.getvalue()
+        for token in ("🚨", "📅", "📚", "💳", "✉️", "Sources: ✉️", "where every input went", "dropped by rule: Chase offers",
+                      "[matched: Chase/due]", "Prayer times"):
+            self.assertIn(token, out)
+
     def test_paid_settles_due(self):
         paid = msg("c9", "noreplyalerts@chase.com", "We've received your Sample Visa payment", day=28)
         text = self.run_text(FakeGoogle(MAIN + [paid]))

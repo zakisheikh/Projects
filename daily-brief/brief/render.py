@@ -1,21 +1,21 @@
 from html import escape
 
 TITLES = {
-    "attention": "Needs attention",
-    "today": "Rest of today",
-    "prayer": "Prayer times",
-    "tomorrow": "Tomorrow",
-    "homework": "Homework later this week",
-    "dues": "Upcoming payments (unpaid)",
-    "health": "Health & medical",
-    "bills": "New bills & statements",
-    "paid": "Payments confirmed",
-    "balances": "Card & bank balances",
-    "receipts": "Receipts",
-    "info": "Other account notices",
-    "school": "School mail",
-    "logistics": "Deliveries & travel",
-    "important": "Other important mail",
+    "attention": "🚨 Needs attention",
+    "today": "📅 Rest of today",
+    "prayer": "🕌 Prayer times",
+    "tomorrow": "🌅 Tomorrow",
+    "homework": "📚 Homework later this week",
+    "dues": "💳 Upcoming payments (unpaid)",
+    "health": "🏥 Health & medical",
+    "bills": "📄 New bills & statements",
+    "paid": "✅ Payments confirmed",
+    "balances": "🏦 Card & bank balances",
+    "receipts": "🧾 Receipts",
+    "info": "ℹ️ Other account notices",
+    "school": "🎓 School mail",
+    "logistics": "✈️ Deliveries & travel",
+    "important": "✉️ Other important mail",
 }
 
 
