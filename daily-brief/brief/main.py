@@ -7,7 +7,8 @@ from datetime import datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import classify, render
+from . import classify, render, state as stmod, telegram
+from .voice import Voice
 from .google import Google
 from .parse import parse_event, parse_mail
 
@@ -40,6 +41,8 @@ def collect_events(g, cfg, tz, start, end):
     cal_cfg = cfg["calendar"]
     hw = re.compile(cal_cfg["homework_pattern"])
     skip, hw_cals = set(cal_cfg["exclude_calendars"]), set(cal_cfg.get("homework_calendars", []))
+    compact = set(cal_cfg.get("compact_calendars", []))
+    tag_hw = cal_cfg.get("course_tag_is_homework", True)
     out = []
     for cal in g.calendars():
         name = cal.get("summaryOverride") or cal.get("summary", "")
@@ -47,7 +50,7 @@ def collect_events(g, cfg, tz, start, end):
             continue
         for raw in g.events(cal["id"], start, end):
             if raw.get("status") != "cancelled":
-                out.append(parse_event(raw, name, tz, hw, name in hw_cals))
+                out.append(parse_event(raw, name, tz, hw, name in hw_cals, name in compact, tag_hw))
     return out
 
 
@@ -113,18 +116,26 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, multi=False):
     horizon = today + timedelta(days=cfg["calendar"]["lookahead_days"])
     soon = today + timedelta(days=cfg["bills"]["due_soon_days"])
 
-    seen, uniq = set(), []
-    for e in sorted(events, key=lambda e: (e.start, e.title)):   # shared calendars appear in several accounts
+    by_key, uniq = {}, []
+    for e in sorted(events, key=lambda e: (e.start, e.title)):   # same event in several calendars/logins -> once
         key = (e.title, e.start, e.end)
-        if key not in seen:
-            seen.add(key)
+        if key in by_key:
+            k = by_key[key]
+            k.homework |= e.homework
+            k.course, k.hint = k.course or e.course, k.hint or e.hint
+            k.compact &= e.compact
+        else:
+            by_key[key] = e
             uniq.append(e)
 
     def on(ev, d):
         return ev.start.date() <= d < max(ev.end.date(), ev.start.date() + timedelta(days=1))
 
-    rest = [e for e in uniq if on(e, today) and (e.all_day or e.end > now)]
-    nxt = [e for e in uniq if on(e, tomorrow)]
+    aliases = cfg["calendar"].get("course_aliases", {})
+    live = [e for e in uniq if on(e, today) and (e.all_day or e.end > now)]
+    rest = [e for e in live if not e.compact and not e.homework]
+    prayer = [e for e in live if e.compact and not e.all_day]
+    nxt = [e for e in uniq if on(e, tomorrow) and not e.compact and not e.homework]
     hw = [e for e in uniq if e.homework and today <= e.start.date() <= horizon]
     mails = [m for m in mails if not m.ignored]
 
@@ -136,7 +147,7 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, multi=False):
 
     dues = sorted(open_bills, key=lambda m: m.due)
     attention = [f"ACCOUNT  {f}" for f in failures]
-    attention += ["HOMEWORK  " + render.event_line(e, with_day=True) for e in hw if e.start.date() <= tomorrow]
+    attention += ["HOMEWORK  " + render.hw_line(e, aliases) for e in hw if e.start.date() <= tomorrow]
     attention += ["DUE  " + bill_line(m) for m in dues if m.due <= soon]
     attention += ["ALERT  " + tag(render.mail_line(m, who=m.biller), m.account, multi) for m in mails if is_alert(m)]
 
@@ -165,8 +176,9 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, multi=False):
     L = lambda items: [tag(render.mail_line(m, who=m.biller), m.account, multi) for m in items[:n]]
     sections = [("attention", attention),
                 ("today", [render.event_line(e) for e in rest]),
+                ("prayer", ["  ·  ".join(f"{e.title} {render.fmt_time(e)}" for e in prayer)] if prayer else []),
                 ("tomorrow", [render.event_line(e) for e in nxt] if slot >= 12 else []),
-                ("homework", [render.event_line(e, with_day=True) for e in hw]),
+                ("homework", [render.hw_line(e, aliases) for e in hw if e.start.date() > tomorrow]),
                 ("dues", [bill_line(m) for m in dues if m.due > soon]),
                 ("health", L(health)), ("bills", L(statements)), ("paid", L(paid)),
                 ("balances", [tag(f"{m.biller}: {m.amount or 'new balance alert, see email'} (latest)", m.account, multi) for m in bal.values()]),
@@ -192,11 +204,41 @@ def build_accounts(cfg, google):
     return out
 
 
+def make_leads(voice, sections, hw_any):
+    present = {k for k, lines in sections if lines}
+    leads = {}
+    leads["attention"] = voice.say("attention_intro") if "attention" in present else voice.say("all_clear")
+    leads["today"] = voice.say("today_intro") if "today" in present else ""
+    if "today" not in present:
+        leads["today"] = voice.say("today_empty")
+    for key, bank in (("tomorrow", "tomorrow_intro"), ("homework", "homework_intro"), ("dues", "dues_intro"),
+                      ("bills", "bills_intro"), ("paid", "paid_intro"), ("health", "health_intro"),
+                      ("important", "mail_intro")):
+        if key in present:
+            leads[key] = voice.say(bank)
+    return leads
+
+
+def telegram_blocks(sections, leads, redact_health):
+    blocks = []
+    for key, lines in sections:
+        if key == "attention":
+            blocks.append((render.TITLES[key], leads.get(key, ""), lines))
+        elif not lines or key in ("receipts", "info", "balances"):
+            continue
+        elif key == "health" and redact_health:
+            blocks.append((render.TITLES[key], "", [f"{len(lines)} item(s). Details are in your email."]))
+        else:
+            blocks.append((render.TITLES[key], leads.get(key, ""), lines))
+    return blocks
+
+
 def run(argv=None, google=None, now=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--force", action="store_true", help="ignore the slot schedule")
-    ap.add_argument("--dry-run", action="store_true", help="print instead of emailing")
+    ap.add_argument("--dry-run", action="store_true", help="print instead of sending")
     ap.add_argument("--config")
+    ap.add_argument("--state", help="path to state.json (kept on the brief-state branch in CI)")
     args = ap.parse_args(argv)
     cfg = load_config(args.config)
     tz = ZoneInfo(cfg["timezone"])
@@ -209,10 +251,15 @@ def run(argv=None, google=None, now=None):
             return 0
         slot = min((h for h in slots if h <= now.hour), default=slots[0])
 
+    st = stmod.load(args.state)
     accounts = build_accounts(cfg, google)
     rules, n_sender = classify.compile_rules(cfg)
     billers = classify.compile_billers(cfg)
     since = window_start(now, slot, slots)
+    prev = stmod.last_sent(st, tz)
+    if prev and now - timedelta(days=3) <= prev <= now:
+        since = prev                      # catch up on anything missed since the last brief
+    seen = st.get("seen", {})
     day_end = datetime.combine(now.date() + timedelta(days=cfg["calendar"]["lookahead_days"] + 1), time.min, tz)
 
     events, mails, open_bills, failures = [], [], [], []
@@ -221,29 +268,57 @@ def run(argv=None, google=None, now=None):
             if err:
                 raise RuntimeError(err)
             e, m, b = gather(name, g, cfg, tz, now, since, day_end, rules, n_sender, billers)
-            events += e; mails += m; open_bills += b
+            events += e
+            mails += [x for x in m if f"{x.account}:{x.id}" not in seen]
+            open_bills += b
         except Exception as ex:   # one broken login must not silence the others
             failures.append(f"{name}: {str(ex)[:160]}")
 
     sections = assemble(events, mails, open_bills, failures, now, slot, cfg, multi=len(accounts) > 1)
-    unread = sum(m.unread for m in mails)
+    pcfg = cfg.get("persona", {})
+    voice = Voice.load(pcfg.get("name", "Bruno"), pcfg.get("user", ""), f"{now:%Y-%m-%d}-{slot}", st.get("phrases"))
+    greeting = voice.say("greet_morning" if slot < 12 else "greet_noon")
+    closing = voice.say("closing_morning" if slot < 12 else "closing_noon")
+    leads = make_leads(voice, sections, True)
     label = "Morning" if slot < 12 else "Midday"
     header = f"{label} brief — {now:%a %b %-d}"
-    footer = f"{len(mails)} new emails across {len(accounts)} account(s) since {since:%-I%p} ({unread} unread). Rules only, no AI."
-    text, html = render.build(sections, header, footer)
+    unread = sum(m.unread for m in mails)
+    footer = f"{len(mails)} new emails across {len(accounts)} account(s) since {since:%a %-I%p} ({unread} unread). Rules only, no AI."
+    text, html = render.build(sections, header, greeting, closing, footer, leads)
+    tg = telegram.fmt(greeting, telegram_blocks(sections, leads, cfg["delivery"].get("telegram_redact_health", True)), closing)
 
     if args.dry_run:
         print(text)
+        print("\n--- telegram preview ---\n" + tg.replace("<b>", "").replace("</b>", "").replace("<i>", "").replace("</i>", ""))
         return 0
-    sender = next(((n, g) for (n, g, e), a in zip(accounts, cfg["accounts"]) if g and a.get("send_from")), None) \
-        or next(((n, g) for n, g, e in accounts if g), None)
-    if not sender:
-        print("No usable account to send from.", file=sys.stderr)
-        return 1
-    to = cfg.get("recipient") or os.environ.get("BRIEF_TO") or sender[1].my_address()
-    sender[1].send(to, header, text, html)
-    print(f"Sent '{header}' to {to} ({len(failures)} account failure(s))")
-    return 1 if failures and len(failures) == len(accounts) else 0
+
+    sent, problems = [], []
+    for ch in cfg["delivery"]["channels"]:
+        try:
+            if ch == "telegram":
+                telegram.send(os.environ["TELEGRAM_BOT_TOKEN"], os.environ["TELEGRAM_CHAT_ID"], tg)
+            elif ch == "email":
+                sender = next(((n, g) for (n, g, e), a in zip(accounts, cfg["accounts"]) if g and a.get("send_from")), None) \
+                    or next(((n, g) for n, g, e in accounts if g), None)
+                if not sender:
+                    raise RuntimeError("no usable account to send from")
+                to = cfg.get("recipient") or os.environ.get("BRIEF_TO") or sender[1].my_address()
+                body_text = text + ("\n\nDelivery problems: " + "; ".join(problems) if problems else "")
+                sender[1].send(to, header, body_text, html)
+            else:
+                raise RuntimeError(f"unknown channel {ch}")
+            sent.append(ch)
+        except Exception as ex:
+            problems.append(f"{ch}: {str(ex)[:140]}")
+    print(f"Sent via {sent or 'nothing'}; problems: {problems or 'none'}; account failures: {len(failures)}")
+    if sent:
+        st["last_sent"] = now.isoformat()
+        st["seen"] = stmod.prune_seen({**seen, **{f"{m.account}:{m.id}": now.isoformat() for m in mails}}, now)
+        st["phrases"] = {**st.get("phrases", {}), **voice.used}
+        late = int((now - now.replace(hour=slot, minute=0, second=0, microsecond=0)).total_seconds() // 60)
+        st["history"] = (st.get("history", []) + [f"{now:%Y-%m-%d} slot {slot}h started {late}m after slot, via {','.join(sent)}"])[-30:]
+        stmod.save(args.state, st)
+    return 0 if sent else 1
 
 
 if __name__ == "__main__":

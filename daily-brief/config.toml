@@ -1,7 +1,15 @@
 # Everything the brief does is driven by rules in this file. No AI involved.
-timezone = "America/New_York"
+timezone = "America/Los_Angeles"
 slots = [7, 12]          # local hours at which a brief is sent
 recipient = ""           # empty = the primary account's own address
+
+[persona]
+name = "Bruno"           # who the messages come from (try "Jarvis"); wording lives in phrases.toml
+user = "Zaki"
+
+[delivery]
+channels = ["telegram", "email"]   # each is tried independently; email is the full version
+telegram_redact_health = true      # Telegram only says "N health items"; details stay in email
 
 # One entry per Gmail/Calendar login. Each needs its own refresh token secret
 # (run auth_setup.py once per account). The first account with send_from=true sends the brief.
@@ -14,12 +22,20 @@ send_from = true
 # token_env = "GOOGLE_REFRESH_TOKEN_2"
 
 [calendar]
-exclude_calendars = ["Holidays in United States", "Birthdays"]
+exclude_calendars = ["Holidays in United States", "Birthdays", "Phases of the Moon"]
+compact_calendars = ["Prayer Times"]      # shown as one line instead of one bullet per prayer
 lookahead_days = 7
 # Calendars whose every event is an assignment (e.g. the subscribed Canvas feed). Fill in the calendar's name.
-homework_calendars = []
+# Canvas feeds import as all-day events titled "<assignment> [<COURSE>]"; the date is the due date.
+homework_calendars = ["Zaki Sheikh Calendar (Canvas)"]
+course_tag_is_homework = true             # any event ending in a [COURSE] tag counts (Canvas copies in your main calendar too)
 # For all other calendars, events matching this are treated as homework.
 homework_pattern = '(?i)\b(homework|assignment|hw ?\d+|quiz|exam|midterm|essay|problem set|pset|lab report|worksheet)\b'
+
+[calendar.course_aliases]                 # substring of the course tag -> short name shown in the brief
+"CS549" = "ML"
+"CS-157B" = "Databases"
+"EXSC 126B" = "Exercise Sci"
 
 [bills]
 lookback_days = 40       # how far back to look for an unpaid "payment due" notice

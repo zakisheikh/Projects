@@ -9,19 +9,29 @@ from zoneinfo import ZoneInfo
 from .models import Event, Mail
 
 
-def parse_event(raw, calendar, tz: ZoneInfo, hw_re, all_homework=False):
+TAG = re.compile(r"\s*\[([^\]]+)\]\s*$")
+HINT = re.compile(r"(?i)\b(?:by|before|due|until)\b[^.\n]{0,60}?(\d{1,2}(?::\d{2})?\s?[ap]\.?m\.?)")
+
+
+def parse_event(raw, calendar, tz: ZoneInfo, hw_re, all_homework=False, compact=False, tag_is_homework=True):
     s, e = raw["start"], raw["end"]
     all_day = "date" in s
-    if all_day:
-        start = datetime.combine(date.fromisoformat(s["date"]), time.min, tz)
-        end = datetime.combine(date.fromisoformat(e["date"]), time.min, tz)
+    if all_day:   # the API gives YYYY-MM-DD; some proxies append a time, so take the date part only
+        start = datetime.combine(date.fromisoformat(s["date"][:10]), time.min, tz)
+        end = datetime.combine(date.fromisoformat(e["date"][:10]), time.min, tz)
     else:
         start = datetime.fromisoformat(s["dateTime"]).astimezone(tz)
         end = datetime.fromisoformat(e["dateTime"]).astimezone(tz)
     title = raw.get("summary", "(no title)")
-    text = f"{title} {raw.get('description', '')}"
-    return Event(title, start, end, all_day, calendar, raw.get("location", ""),
-                 all_homework or bool(hw_re.search(text)))
+    desc = raw.get("description", "")
+    tag = TAG.search(title)          # Canvas appends the course as a trailing [COURSE] tag
+    course = tag.group(1) if tag else ""
+    if tag:
+        title = title[:tag.start()]
+    hint = HINT.search(desc)
+    homework = all_homework or bool(tag and tag_is_homework) or bool(hw_re.search(f"{title} {desc[:300]}"))
+    return Event(title, start, end, all_day, calendar, raw.get("location", ""), homework, compact, course,
+                 f"by {hint.group(1).upper().replace('.', '')}" if hint and homework else "")
 
 
 def _walk(part):

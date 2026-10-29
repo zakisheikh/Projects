@@ -6,8 +6,8 @@ from zoneinfo import ZoneInfo
 from brief import classify
 from brief.main import pick_slot, run, window_start
 
-TZ = ZoneInfo("America/New_York")
-NOW = datetime(2026, 10, 29, 12, 5, tzinfo=TZ)
+TZ = ZoneInfo("America/Los_Angeles")
+NOW = datetime(2026, 10, 29, 12, 17, tzinfo=TZ)
 
 
 def b64(s):
@@ -56,15 +56,31 @@ class FakeGoogle:
         self.cal = cal
 
     def calendars(self):
-        return [{"id": "primary", "summary": "Me"}, {"id": "b", "summary": "Birthdays"}]
+        return [{"id": "primary", "summary": "Me"}, {"id": "canvas", "summary": "Zaki Sheikh Calendar (Canvas)"},
+                {"id": "pray", "summary": "Prayer Times"}, {"id": "moon", "summary": "Phases of the Moon"}]
 
     def events(self, cid, start, end):
-        if cid != "primary":
-            return [{"summary": "Mom bday", "start": {"date": "2026-10-29"}, "end": {"date": "2026-10-30"}}]
+        canvas = [
+            {"summary": "Final Project: Proposal [CS549-09-Fall2026]", "start": {"date": "2026-10-30T00:00:00Z"},
+             "end": {"date": "2026-10-31T00:00:00Z"},
+             "description": "Please vote by [Friday, October 30 at 7:00 PM]."},
+            {"summary": "Week 10-Old Faithful Again [2267_MESA_EXSC 126B_42431]", "start": {"date": "2026-10-31"},
+             "end": {"date": "2026-11-01"}},
+            {"summary": "Essay 2 [FA26: CS-157B Sec 01 - Data BS Man Sys II]", "start": {"date": "2026-11-03"},
+             "end": {"date": "2026-11-04"}},
+        ]
+        if cid == "canvas":
+            return canvas
+        if cid == "pray":
+            return [{"summary": "Fajr", "start": {"dateTime": "2026-10-29T05:50:00-07:00"}, "end": {"dateTime": "2026-10-29T06:10:00-07:00"}},
+                    {"summary": "Zuhr", "start": {"dateTime": "2026-10-29T12:32:00-07:00"}, "end": {"dateTime": "2026-10-29T12:52:00-07:00"}},
+                    {"summary": "Maghrib", "start": {"dateTime": "2026-10-29T18:16:00-07:00"}, "end": {"dateTime": "2026-10-29T18:36:00-07:00"}}]
+        if cid == "moon":
+            return [{"summary": "Full moon", "start": {"date": "2026-10-29"}, "end": {"date": "2026-10-30"}}]
         return [
-            {"summary": "Standup", "start": {"dateTime": "2026-10-29T09:00:00-04:00"}, "end": {"dateTime": "2026-10-29T09:30:00-04:00"}},
-            {"summary": "Dentist", "location": "Main St", "start": {"dateTime": "2026-10-29T15:00:00-04:00"}, "end": {"dateTime": "2026-10-29T16:00:00-04:00"}},
-            {"summary": "Bio homework due", "start": {"date": "2026-10-30"}, "end": {"date": "2026-10-31"}},
+            {"summary": "Standup", "start": {"dateTime": "2026-10-29T09:00:00-07:00"}, "end": {"dateTime": "2026-10-29T09:30:00-07:00"}},
+            {"summary": "Dentist", "location": "Main St, San Diego", "start": {"dateTime": "2026-10-29T15:00:00-07:00"}, "end": {"dateTime": "2026-10-29T16:00:00-07:00"}},
+            canvas[0],     # Canvas copy that also lives in the primary calendar
         ]
 
     def search(self, q, limit=100):
@@ -110,13 +126,20 @@ class Tests(unittest.TestCase):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             run(["--force", "--dry-run"], google=google, now=NOW)
-        return buf.getvalue()
+        return buf.getvalue().split("--- telegram preview ---")[0]
 
     def test_single_account(self):
         text = self.run_text(FakeGoogle(MAIN))
         self.assertIn("Dentist @ Main St", text)
         self.assertNotIn("Standup", text)                       # already over
-        self.assertNotIn("Mom bday", text)                      # excluded calendar
+        self.assertNotIn("Full moon", text)                     # excluded calendar
+        self.assertIn("Prayer Times".upper(), text.upper())
+        self.assertIn("Zuhr 12:32pm", text)                     # compact one-liner
+        self.assertNotIn("Fajr", text)                          # already passed
+        self.assertEqual(text.count("Final Project: Proposal"), 1)   # Canvas copy in two calendars -> once
+        self.assertIn("(ML)", text)                             # course alias
+        self.assertIn("by 7:00 PM", text)                       # deadline hint from description
+        self.assertIn("Databases", text)
         self.assertIn("HOMEWORK", text)
         self.assertIn("DUE  Chase", text)                       # unpaid, due in 3 days
         self.assertIn("$40.00", text)
@@ -160,6 +183,65 @@ class Tests(unittest.TestCase):
             self.assertIn("Dentist", text)                      # healthy account still reported
         finally:
             bm.load_config = orig
+
+    def test_voice_varies_and_never_repeats(self):
+        from brief.voice import Voice
+        last = {}
+        seen = []
+        for day in range(30):
+            v = Voice.load("Bruno", "Zaki", f"2026-10-{day}-7", last)
+            seen.append(v.say("greet_morning"))
+            if day:
+                self.assertNotEqual(seen[-1], seen[-2])
+            last.update(v.used)
+        self.assertGreater(len(set(seen)), 4)
+        self.assertTrue(all("Zaki" in x or "boss" in x or "Bruno" in x or "morning" in x.lower() or "Up and at" in x for x in seen))
+
+    def test_state_and_delivery(self):
+        import json, os, tempfile
+        import brief.main as bm
+        import brief.telegram as tgm
+        sent = []
+        orig_send, orig_load = tgm.send, bm.load_config
+        tgm.send = lambda tok, chat, html: sent.append(html)
+        cfg = orig_load()
+        cfg["delivery"]["channels"] = ["telegram", "email"]
+        bm.load_config = lambda path=None: cfg
+        os.environ.update(TELEGRAM_BOT_TOKEN="t", TELEGRAM_CHAT_ID="1")
+        path = os.path.join(tempfile.mkdtemp(), "state.json")
+        try:
+            g = FakeGoogle(MAIN)
+            FakeGoogle.sent = None
+            self.assertEqual(run(["--force", "--state", path], google=g, now=NOW), 0)
+            self.assertTrue(sent and FakeGoogle.sent)
+            self.assertIn("Details are in your email", sent[0])        # health redacted on Telegram
+            self.assertNotIn("Aetna", sent[0])
+            self.assertIn("Aetna", FakeGoogle.sent[2])                 # but present in the email
+            with open(path) as f:
+                st = json.load(f)
+            self.assertIn("last_sent", st)
+            self.assertTrue(st["seen"] and st["phrases"])
+            self.assertIn("started 17m after slot", st["history"][-1])
+            # second run: already-reported mail is not repeated as new
+            sent.clear()
+            run(["--force", "--state", path], google=g, now=NOW.replace(minute=40))
+            self.assertNotIn("lunch?", FakeGoogle.sent[2])
+            # one channel failing must not block the other
+            def boom(*a): raise RuntimeError("down")
+            tgm.send = boom
+            FakeGoogle.sent = None
+            self.assertEqual(run(["--force"], google=g, now=NOW), 0)
+            self.assertIn("telegram: down", FakeGoogle.sent[2])
+        finally:
+            tgm.send, bm.load_config = orig_send, orig_load
+
+    def test_telegram_chunking_and_escape(self):
+        from brief import telegram as tgm
+        out = tgm.fmt("hi <b>", [("T", "lead & more", ["a < b"])], "bye")
+        self.assertIn("a &lt; b", out)
+        big = "\n\n".join(["x" * 1000] * 10)
+        parts = tgm.chunks(big)
+        self.assertTrue(all(len(p) <= 3900 for p in parts) and len(parts) > 1)
 
     def test_off_slot_noop(self):
         FakeGoogle.sent = None

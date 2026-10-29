@@ -12,6 +12,9 @@ class Event:
     calendar: str = ""
     location: str = ""
     homework: bool = False
+    compact: bool = False
+    course: str = ""
+    hint: str = ""
 
 
 @dataclass

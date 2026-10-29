@@ -1,0 +1,123 @@
+# Phrase bank for the assistant's voice. Plain text templates, picked pseudo-randomly (seeded by date+slot)
+# and never the same one twice in a row. Placeholders: {name} = you, {bot} = assistant name, {n} = a count.
+# Add or edit lines freely; every list needs at least 2 entries.
+
+greet_morning = [
+  "Good morning, {name}. {bot} reporting in.",
+  "Morning, {name}. Here's what the day looks like.",
+  "Rise and shine, {name}. {bot} has the rundown.",
+  "Morning, boss. I went through everything overnight.",
+  "{name}, good morning. Coffee first, then this.",
+  "Up and at it, {name}. Today's briefing is ready.",
+  "Good morning, {name}. I've got your day mapped out.",
+]
+greet_noon = [
+  "Midday check-in, {name}. {bot} here.",
+  "Afternoon, {name}. Here's what's left of the day.",
+  "{name}, quick noon update from {bot}.",
+  "Halfway point, {name}. Here's where things stand.",
+  "Noon report, {name}. Nothing slips past me.",
+  "Lunchtime update, {name}. Here's the remainder.",
+  "Hey {name}, {bot} again. Midday status below.",
+]
+attention_intro = [
+  "Needs you first:",
+  "Heads up, these can't wait:",
+  "Flagging these before anything else:",
+  "Top of the list:",
+  "Do these before they bite:",
+  "Eyes here first:",
+]
+all_clear = [
+  "Nothing urgent. Enjoy the quiet.",
+  "No fires today. Clean slate.",
+  "Nothing is on fire, which is how I like it.",
+  "All clear on the urgent front.",
+  "Nothing needs you right now.",
+  "Quiet radar. Nothing due, nothing alarming.",
+]
+today_intro = [
+  "What's left on the calendar today:",
+  "Still ahead today:",
+  "On deck for today:",
+  "Your schedule from here:",
+  "Remaining today:",
+  "Coming up today:",
+]
+today_empty = [
+  "Calendar's clear for the rest of today.",
+  "Nothing else scheduled today.",
+  "No more events today. Your time is your own.",
+  "The rest of today is wide open.",
+  "Nothing left on today's calendar.",
+]
+tomorrow_intro = [
+  "A look at tomorrow:",
+  "Tomorrow so far:",
+  "Heads up for tomorrow:",
+  "Tomorrow's lineup:",
+  "Getting ahead on tomorrow:",
+]
+homework_intro = [
+  "Coursework coming due:",
+  "Homework radar:",
+  "School stuff on the clock:",
+  "Assignments to watch:",
+  "Due soon on the school front:",
+  "Academic deadlines:",
+]
+homework_none = [
+  "No assignments due this week.",
+  "Homework is clear for now.",
+  "Nothing due on the school front.",
+  "No coursework deadlines coming up.",
+]
+dues_intro = [
+  "Payments still open:",
+  "Unpaid and upcoming:",
+  "Bills waiting on you:",
+  "On the payment list:",
+  "Money going out soon:",
+  "Upcoming bills:",
+]
+bills_intro = [
+  "New bills and statements:",
+  "Fresh in the billing inbox:",
+  "New statements landed:",
+  "Just arrived, billing-wise:",
+]
+paid_intro = [
+  "Confirmed paid:",
+  "Payments that went through:",
+  "Settled since last time:",
+  "Receipts for payments made:",
+]
+health_intro = [
+  "Health and medical:",
+  "On the health front:",
+  "Medical mail:",
+  "Health paperwork:",
+]
+mail_intro = [
+  "Worth a look in your inbox:",
+  "Mail that matters:",
+  "Inbox highlights:",
+  "From the inbox:",
+  "Messages worth opening:",
+]
+closing_morning = [
+  "Go get it, {name}.",
+  "That's the lot. Have a strong day.",
+  "I'll check back at noon.",
+  "Make it a good one, {name}.",
+  "{bot} out. Ping me at noon.",
+  "You've got this. I'll be watching the inbox.",
+]
+closing_noon = [
+  "That's the update. Back at it, {name}.",
+  "I'll keep an eye on things until tomorrow.",
+  "Carry on, {name}.",
+  "{bot} signing off until morning.",
+  "Rest of the day is yours.",
+  "Go finish strong.",
+]

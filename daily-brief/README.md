@@ -15,31 +15,29 @@ Pure rules and regexes (`config.toml`) — no AI, no third-party dependencies (P
 
 Python because the work is string parsing + a few REST calls; stdlib alone is enough, so there's nothing to patch or break.
 
-## What it reads (all read-only except sending the brief to yourself)
+## What it reads (read-only except sending the brief)
 
 Scopes: `calendar.readonly`, `gmail.readonly`, `gmail.send`. It never modifies or deletes anything.
+Delivery: a Telegram bot (short, in "Bruno's" voice) plus the full brief by email. Wording comes from `phrases.toml`
+(no AI); the persona name is `[persona]` in `config.toml`.
 
-### Money without connecting banks
-- **Credit cards / bills / health**: parsed from the statement and alert emails you already get
-  (amount due, due date, fraud/unusual-activity alerts, EOBs). No bank login needed. Tune the senders/keywords in `config.toml`.
-- If you later want balances/transactions: **Plaid** (read-only, but business-oriented onboarding), or
-  **SimpleFIN Bridge** (~$15/yr, read-only token, individuals welcome) are the realistic options. Not included — email covers bills and alerts, which is what a briefing needs.
+## Setup (one time)
 
-## Setup (~10 min, one time)
+1. **Google**: Cloud Console project, enable Gmail API + Google Calendar API, OAuth consent screen **In production**, Desktop-app OAuth client.
+   Run `GOOGLE_CLIENT_ID=… GOOGLE_CLIENT_SECRET=… python3 auth_setup.py` once per Gmail account (after publishing).
+2. **Telegram**: talk to @BotFather → `/newbot` → copy the token; message your new bot once; run
+   `TELEGRAM_BOT_TOKEN=… python3 telegram_setup.py` to get your chat id.
+3. **Repo** (must be private) → Settings → Secrets → Actions: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`
+   (+ `_2`, `_3` for more accounts), `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+4. Merge to the default branch (schedules only run there). Actions → daily-brief → Run workflow with dry run on, read the log, then off.
 
-1. Google Cloud Console → new project → enable **Gmail API** and **Google Calendar API**.
-2. OAuth consent screen: External, add yourself as a test user; then **publish to "In production"**
-   (test-mode refresh tokens expire after 7 days). Personal use with unverified-app warning is fine.
-3. Credentials → OAuth client ID → **Desktop app**. Copy the client ID/secret.
-4. Locally: `GOOGLE_CLIENT_ID=… GOOGLE_CLIENT_SECRET=… python3 auth_setup.py` → copy the refresh token.
-5. Repo → Settings → Secrets → Actions: add `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`.
-6. Edit `config.toml` (timezone, slots, homework words, senders). Merge to the default branch (schedules only run there).
-7. Actions → daily-brief → **Run workflow** with dry run on, check the log, then off to receive a real email.
+The workflow runs at 7:17 and 12:17 America/Los_Angeles (cron fires at both the PDT and PST UTC hours; the off-season run exits).
+State (last send time, reported mail ids, last phrases, run lateness) lives in `state.json` on the `brief-state` branch, which the workflow creates.
 
 ## Run locally
 ```
 export GOOGLE_CLIENT_ID=… GOOGLE_CLIENT_SECRET=… GOOGLE_REFRESH_TOKEN=…
-python3 -m brief --force --dry-run
+python3 -m brief --force --dry-run --state /tmp/state.json
 python3 -m unittest discover -s tests -t .
 ```
 

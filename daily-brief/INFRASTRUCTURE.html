@@ -40,20 +40,20 @@
 <body>
 <main>
 <h1>Daily Brief — infrastructure plan</h1>
-<p class="sub">Rule-based (no AI) 7am + noon briefing, delivered to iMessage. Revision 3 · private GitHub repo · target cost $0, ceiling a couple dollars a month.</p>
+<p class="sub">Rule-based (no AI) 7am + noon briefing, delivered by “Bruno” on Telegram + email. Revision 4 · private GitHub repo · target cost $0, ceiling a couple dollars a month.</p>
 
 <div class="grid">
   <div class="card"><b>Runs on</b>GitHub Actions cron in a private repo. Nothing of yours needs to be awake.</div>
   <div class="card"><b>Reads</b>Google Calendar (incl. the Canvas feed) and Gmail, read-only.</div>
-  <div class="card"><b>Delivers via</b>Email + push now; iMessage through an iPhone Shortcut bridge (free) or a paid iMessage API (optional).</div>
-  <div class="card"><b>Cost</b>$0 baseline. $4.99 one-time for guaranteed push. iMessage-as-a-service is the only thing that breaks the budget.</div>
+  <div class="card"><b>Delivers via</b>Telegram bot (free, instant) with the full version by email. iMessage stays optional.</div>
+  <div class="card"><b>Cost</b>$0. Telegram, GitHub Actions and Gmail/Calendar APIs are all free at this volume.</div>
 </div>
 
 <h2>1. Architecture</h2>
 <svg viewBox="0 0 860 330" role="img" aria-label="Architecture diagram">
   <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8a8a92"/></marker></defs>
-  <rect class="box hot" x="10" y="20" width="170" height="60" rx="8"/><text x="95" y="46" text-anchor="middle">GitHub Actions cron</text><text x="95" y="63" text-anchor="middle" class="small">4 UTC triggers → 7am &amp; 12pm ET</text>
-  <rect class="box" x="230" y="20" width="170" height="60" rx="8"/><text x="315" y="46" text-anchor="middle">Slot gate + catch-up</text><text x="315" y="63" text-anchor="middle" class="small">skip DST twin, window = last brief</text>
+  <rect class="box hot" x="10" y="20" width="170" height="60" rx="8"/><text x="95" y="46" text-anchor="middle">GitHub Actions cron</text><text x="95" y="63" text-anchor="middle" class="small">4 UTC triggers → 7am &amp; 12pm PT</text>
+  <rect class="box" x="230" y="20" width="170" height="60" rx="8"/><text x="315" y="46" text-anchor="middle">Slot gate + catch-up</text><text x="315" y="63" text-anchor="middle" class="small">skip DST twin, catch up from state</text>
   <rect class="box" x="450" y="20" width="190" height="60" rx="8"/><text x="545" y="46" text-anchor="middle">Collectors (stdlib Python)</text><text x="545" y="63" text-anchor="middle" class="small">Calendar · Gmail (read-only)</text>
   <rect class="box" x="690" y="20" width="160" height="60" rx="8"/><text x="770" y="46" text-anchor="middle">Rules engine</text><text x="770" y="63" text-anchor="middle" class="small">config.toml regex, $ + due dates</text>
   <path class="arrow" d="M180,50 H230"/><path class="arrow" d="M400,50 H450"/><path class="arrow" d="M640,50 H690"/>
@@ -62,43 +62,49 @@
   <rect class="box" x="450" y="140" width="190" height="60" rx="8"/><text x="545" y="166" text-anchor="middle">Dispatcher</text><text x="545" y="183" text-anchor="middle" class="small">tries each channel, logs result</text>
   <path class="arrow" d="M690,170 H640"/>
   <rect class="box" x="20" y="250" width="190" height="60" rx="8"/><text x="115" y="276" text-anchor="middle">Email to self (Gmail send)</text><text x="115" y="293" text-anchor="middle" class="small">full brief · source of truth</text>
-  <rect class="box" x="250" y="250" width="190" height="60" rx="8"/><text x="345" y="276" text-anchor="middle">Push (Pushover / ntfy)</text><text x="345" y="293" text-anchor="middle" class="small">short brief · reliable fallback</text>
-  <rect class="box hot" x="480" y="250" width="190" height="60" rx="8"/><text x="575" y="276" text-anchor="middle">iPhone Shortcut → iMessage</text><text x="575" y="293" text-anchor="middle" class="small">triggered by the short email</text>
-  <rect class="box" x="710" y="250" width="140" height="60" rx="8"/><text x="780" y="276" text-anchor="middle">Paid iMessage API</text><text x="780" y="293" text-anchor="middle" class="small">optional · ~$39/mo</text>
+  <rect class="box" x="250" y="250" width="190" height="60" rx="8"/><text x="345" y="276" text-anchor="middle">Telegram bot “Bruno”</text><text x="345" y="293" text-anchor="middle" class="small">short brief · free · instant</text>
+  <rect class="box hot" x="480" y="250" width="190" height="60" rx="8"/><text x="575" y="276" text-anchor="middle">iMessage bridge (optional)</text><text x="575" y="293" text-anchor="middle" class="small">Shortcut or paid API · not built</text>
+  <rect class="box" x="710" y="250" width="140" height="60" rx="8"/><text x="780" y="276" text-anchor="middle">State (brief-state branch)</text><text x="780" y="293" text-anchor="middle" class="small">last sent · seen · phrases</text>
   <path class="arrow" d="M545,200 V225 H115 V250"/><path class="arrow" d="M545,200 V225 H345 V250"/><path class="arrow" d="M545,200 V250 H575" /><path class="arrow dash" d="M545,200 V225 H780 V250"/>
   <rect class="box" x="20" y="140" width="190" height="60" rx="8"/><text x="115" y="166" text-anchor="middle">Watchdog workflow</text><text x="115" y="183" text-anchor="middle" class="small">9am / 1pm: was a brief sent? else alert</text>
 </svg>
 <p>The job is stateless. “State” (when the last brief went out) is read back from Gmail itself, so there is no database to host, secure or lose.</p>
 
-<h2>2. Delivery: iMessage is the hard part</h2>
-<div class="callout"><b>Fact:</b> Apple has no iMessage API, and there is no free way to send a real iMessage from a cloud server. Every server-side option is either a third-party service running real Apple hardware, or something on <em>your</em> iPhone/Mac. Pricing below comes from vendor-run comparison pages, so confirm on each vendor's site.</div>
+<h2>2. Delivery: Telegram bot, in Bruno's voice</h2>
+<div class="callout good"><b>Decision:</b> deliver through a <b>Telegram bot</b>. It is free, delivers instantly to your phone, needs no phone to be on at a particular time, and setup is three steps (create the bot with @BotFather, message it once, store two secrets). The full brief still goes to your email, so nothing depends on Telegram alone. If one channel fails the other still sends and the email says what broke.</div>
 <table>
-  <tr><th>Option</th><th>Real iMessage?</th><th>Cost</th><th>Needs your device on?</th><th>Verdict</th></tr>
-  <tr><td><b>A. iPhone Shortcut bridge</b><br>Cloud sends a short email → an <em>email-triggered</em> Personal Automation (Run Immediately ON) runs <code>Send Message</code></td><td class="ok">Yes (blue bubble)</td><td class="ok">$0</td><td class="warn">Phone must be on, online, and receive the email</td><td><b>Try first.</b> Event-driven, so no clock reliance. Unverified for message-to-self; reports of the prompt “run?” appearing instead of running silently. Must be tested on your phone.</td></tr>
-  <tr><td><b>B. Time-of-day Shortcut</b> that fetches the brief from a private URL and sends it</td><td class="ok">Yes</td><td class="ok">$0</td><td class="warn">Phone on/unlocked at trigger time</td><td>Worse than A (needs a hosted endpoint + clock). Skip unless A fails.</td></tr>
-  <tr><td><b>C. Pushover</b> push notification</td><td class="bad">No (a notification)</td><td class="ok">$4.99 one-time <a href="https://pushover.net/pricing">(pricing)</a></td><td class="ok">No</td><td><b>Adopt as the guaranteed channel.</b> Arrives even if the Shortcut flakes.</td></tr>
-  <tr><td><b>D. ntfy.sh</b> push</td><td class="bad">No</td><td class="ok">Free tier (rate-limited); paid tiers reported ~$5+/mo</td><td class="ok">No</td><td>Free alternative to C. Public topics are unauthenticated — use a long random topic name.</td></tr>
-  <tr><td><b>E. Twilio SMS</b></td><td class="bad">No (green bubble)</td><td class="warn">Roughly $4–6/mo all-in: number + ~$2/mo sole-prop campaign + $4–15 one-time registration + ~1¢/msg. <a href="https://support.twilio.com/hc/en-us/articles/1260803965530">(Twilio)</a></td><td class="ok">No</td><td>Only if you want a text, not an iMessage. US registration hassle.</td></tr>
-  <tr><td><b>F. Paid iMessage API</b> (Blooio, LoopMessage, Sendblue…)</td><td class="ok">Yes, server-side</td><td class="bad">~$39–100/mo; Sendblue outbound quote-only <a href="https://blooio.com/blog/best-imessage-api-2026">(comparison)</a></td><td class="ok">No</td><td>The only fully hands-off blue-bubble path, and ~10× over your budget. Revisit only if A proves unreliable.</td></tr>
-  <tr><td><b>G. Always-on Mac / old iPhone as relay</b></td><td class="ok">Yes</td><td class="warn">Hardware you already own</td><td class="bad">Yes, always</td><td>Contradicts the “nothing awake” requirement. Rejected.</td></tr>
+  <tr><th>Option</th><th>Cost</th><th>Complexity</th><th>Verdict</th></tr>
+  <tr><td><b>Telegram bot</b></td><td class="ok">$0</td><td class="ok">Low: one HTTPS POST per message, 4,096-char limit (handled by chunking)</td><td><b>Chosen.</b> Caveat: bot chats are not end-to-end encrypted, so health items are reduced to “N items, details in email” on Telegram (switchable).</td></tr>
+  <tr><td>Email</td><td class="ok">$0</td><td class="ok">Already built</td><td><b>Kept</b> as the full, detailed version.</td></tr>
+  <tr><td>iMessage via iPhone Shortcut (email-triggered)</td><td class="ok">$0</td><td class="warn">Medium; phone must be on; “run silently” and message-to-self behavior unverified</td><td>Optional later experiment.</td></tr>
+  <tr><td>Real iMessage API (Blooio, LoopMessage, Sendblue)</td><td class="bad">~$39–100/mo (<a href="https://blooio.com/blog/best-imessage-api-2026">comparison</a>)</td><td class="warn">Medium</td><td>Over budget. Apple offers no iMessage API.</td></tr>
+  <tr><td>Twilio SMS</td><td class="warn">~$4–6/mo</td><td class="bad">US carrier registration</td><td>No benefit over Telegram.</td></tr>
+  <tr><td>Pushover / ntfy</td><td>$4.99 once / free</td><td class="ok">Low</td><td>Redundant now that Telegram exists.</td></tr>
 </table>
-<h3>Recommendation</h3>
-<ol>
-  <li><b>Always send the full email</b> (source of truth) and a <b>Pushover push</b> ($4.99 once) so you never miss a brief.</li>
-  <li><b>Also send a short, plain-text “iMessage email”</b> with a fixed subject prefix; build the Shortcut (<em>Automation → Email → sender = yourself, subject contains prefix → Run Immediately → Send Message</em>). Test for a week.</li>
-  <li>If the Shortcut can't run silently or can't text yourself, decide between living with push, SMS (E), or paying for F.</li>
-</ol>
-<p><b>Format constraint:</b> iMessage is a chat, not a document. I'll add a second renderer capped near 1,000 characters: <em>Needs attention</em> first, then next 3 events, then counts (“4 new mail, 2 bills”), with the full detail in the email.</p>
 
-<h2>3. Homework: the Canvas calendar feed</h2>
-<p>You're right: the Canvas feed subscribed in Google Calendar is the most reliable homework source, and it carries course, title, due time and link. So I'm changing the design, not just the keywords:</p>
+<h2>2b. Bruno's voice: phrase bank, still no AI</h2>
 <ul>
-  <li>Add <code>homework_calendars = ["&lt;name of your Canvas calendar&gt;"]</code> to <code>config.toml</code>. <b>Every event on that calendar is treated as an assignment</b> — no guessing from words. The keyword regex remains only for your normal calendars.</li>
-  <li>Parse the course tag from the title (Canvas appends <code>[COURSE]</code>) and group the homework section by course, sorted by due time, with “due in 3h / tomorrow 11:59pm” phrasing.</li>
-  <li>Surface overdue-today and due-within-24h items under <em>Needs attention</em>.</li>
-  <li><b>Caveat:</b> Google refreshes subscribed (ICS) calendars on its own schedule, so newly posted assignments can appear hours late. Nothing we run can speed that up; the brief shows whatever Google has.</li>
-  <li><b>Assumption to check:</b> subscribed calendars are readable through the Calendar API like any other calendar. I expect so, but I'll confirm during the first dry run.</li>
+  <li>The persona name (<code>Bruno</code>, or <code>Jarvis</code>) and your name live in <code>[persona]</code> in <code>config.toml</code>.</li>
+  <li>All wording is in <code>phrases.toml</code>: ~16 banks (morning/noon greetings, “needs attention” lead-ins, all-clear lines, section intros, sign-offs), 4–7 variants each, with <code>{name}</code>, <code>{bot}</code> placeholders. Add lines any time.</li>
+  <li>Pick rule: pseudo-random but seeded by date + slot, so a re-run of the same brief reads identically, and <b>the same phrase is never used twice in a row</b> (the last pick per bank is kept in state). Tested over 30 simulated days.</li>
+  <li>Data lines (amounts, dates, subjects) are never reworded; only the framing around them varies.</li>
 </ul>
+
+<h2>3. Homework: what your Canvas calendars actually look like</h2>
+<p>I read your calendars. Findings, and what the code now does about each:</p>
+<table>
+  <tr><th>What I saw</th><th>Handling</th></tr>
+  <tr><td>Three calendars all named <b>“Zaki Sheikh Calendar (Canvas)”</b> (SDSU, SJSU, Mesa), imported by subscription</td><td>One config entry (<code>homework_calendars</code>) matches all three by name.</td></tr>
+  <tr><td>Assignments are <b>all-day events on the due date</b>, titled <code>Assignment 3: Kmeans and NN [CS549-09-Fall2026]</code></td><td>Every event on those calendars is homework. The trailing <code>[COURSE]</code> tag is split off as the course.</td></tr>
+  <tr><td>Course tags are ugly: <code>CS549-09-Fall2026</code>, <code>FA26: CS-157B Sec 01 - Data BS Man Sys II</code>, <code>2267_MESA_EXSC 126B_42431</code></td><td><code>course_aliases</code> maps them to short names: ML, Databases, Exercise Sci.</td></tr>
+  <tr><td>The real deadline time is only in the description (“…by Friday, October 30 at 7:00 PM”)</td><td>A deadline hint is pulled from the description and shown (“by 7:00 PM”) when present.</td></tr>
+  <tr><td>The same Canvas events <b>also appear in your main calendar</b> (same ids)</td><td>Duplicates are merged, so each item shows once.</td></tr>
+  <tr><td>Some Canvas items are not homework (class polls, advising notices)</td><td>They show up as due items too. Cheap to live with; can be excluded by title if it bugs you.</td></tr>
+  <tr><td>I cannot see whether an assignment has been <i>submitted</i></td><td>The brief lists what is due, not what is unsubmitted. Overdue-but-unsubmitted is not detectable from the feed.</td></tr>
+  <tr><td><b>Prayer Times</b> calendar adds 5 events a day; <b>Phases of the Moon</b> is noise</td><td>Prayer times collapse to one line of what is still ahead (<code>compact_calendars</code>); the moon calendar is excluded.</td></tr>
+  <tr><td><b>Joint Ops</b> (shared with your wife) holds classes, flights, parties</td><td>Included as normal events. Her entries appear there too.</td></tr>
+</table>
+<p>Caveat that remains: Google refreshes subscribed (ICS) feeds on its own schedule, so new assignments can appear hours late.</p>
 
 <h2>3b. Bills &amp; money: rules learned from your real mail</h2>
 <p>I searched the connected Gmail (read-only) for the last year of bill, statement, rent, insurance and medical mail and turned what I found into <code>[[billers]]</code> in <code>config.toml</code> (sender + subject templates only; no account numbers or amounts are stored in the repo). I replayed ~35 real subject lines through the rules to check them.</p>
@@ -133,36 +139,55 @@
   <li><b>Not done yet:</b> the only Gmail I could read was <code>zshake21@gmail.com</code>. Biller rules for your other accounts need that mail sampled, or you can tell me which senders to expect.</li>
 </ul>
 
-<h2>4. Hosting &amp; scheduling</h2>
+<h3>3d. State (kept in the private repo)</h3>
+<ul>
+  <li>The workflow keeps a small <code>state.json</code> on a separate <b><code>brief-state</code></b> branch, so it never clutters your code history. It is committed back after each real send.</li>
+  <li>It holds: when the last brief went out, ids of mail already reported (pruned after 7 days), the last phrase used per bank, and a 30-entry log of how late each run started.</li>
+  <li>What that buys: <b>catch-up</b> (a missed or late run's mail appears in the next brief, up to 3 days back), <b>no repeats</b> of the same email, <b>non-repeating phrases</b>, and <b>measured lateness</b> of GitHub's scheduler so you can judge it with data.</li>
+  <li>It stores message ids and timestamps only, no subjects or bodies.</li>
+</ul>
+
+<h2>4. Hosting &amp; scheduling: can GitHub do the 7am and noon triggers?</h2>
+<p><b>Yes.</b> One workflow, <code>cron: "17 14,15,19,20 * * *"</code>, fires at 7:17 and 12:17 Pacific in both daylight and standard time (7am = 14/15 UTC, noon = 19/20 UTC); the off-season twin sees it is outside a slot and exits. Minute 17 sidesteps the top-of-hour rush.</p>
+<div class="callout"><b>Why I called it “not great”:</b> GitHub treats scheduled runs as best-effort. They can start late when GitHub is busy and, rarely, be skipped (<a href="https://docs.github.com/en/enterprise-server@3.15/actions/how-tos/manage-workflow-runs/disable-and-enable-workflows">GitHub docs</a>). Public repos also get schedules switched off after 60 days of inactivity (<a href="https://dev.to/gautamkrishnar/how-to-prevent-github-from-suspending-your-cronjob-based-triggers-knf">ref</a>); yours is private. It is fine for a briefing, but not to-the-minute. The design absorbs it:</div>
+<ul>
+  <li>1-hour grace window: a run that starts up to an hour late still sends; a later one is skipped rather than duplicated.</li>
+  <li>State-based catch-up: if a brief is missed entirely, the next one includes the missed mail.</li>
+  <li>The state log records how late each run starts. After two weeks you will know if it is a real problem.</li>
+  <li><b>If it is:</b> add a free external pinger (e.g. cron-job.org) that calls the workflow's <code>workflow_dispatch</code> at exactly 7:00 and 12:00 PT. Trade-off: a GitHub token stored at a third party. Or move the trigger to a Cloudflare Workers cron (free, more punctual).</li>
+  <li>Still to build: the watchdog that alerts you when a brief did not go out at all.</li>
+</ul>
 <table>
   <tr><th>Option</th><th>Finding</th><th>Decision</th></tr>
-  <tr><td>GitHub Actions <code>schedule</code></td><td>Can start late under load. Public repos get scheduled workflows <b>auto-disabled after 60 days of no activity</b> (<a href="https://dev.to/gautamkrishnar/how-to-prevent-github-from-suspending-your-cronjob-based-triggers-knf">ref</a>). Private repo + free-tier minutes is ample: ~120 runs/mo × &lt;1 min.</td><td><b>Primary.</b> Repo is private (your call).</td></tr>
-  <tr><td>Vercel Cron</td><td>Hobby: once per day, fires anywhere in the hour (<a href="https://vercel.com/docs/cron-jobs/usage-and-pricing">docs</a>). Cannot do two sends/day.</td><td>Rejected on free tier.</td></tr>
-  <tr><td>Cloudflare Workers cron / AWS EventBridge</td><td>Precise and very reliable; extra setup; free tiers fit.</td><td><b>Fallback</b> if Actions proves flaky.</td></tr>
+  <tr><td>GitHub Actions <code>schedule</code></td><td>Free, private repo, ~120 runs/month under a minute each. Best-effort timing.</td><td><b>Primary.</b></td></tr>
+  <tr><td>Vercel Cron</td><td>Hobby plan: once per day, fires anywhere in the hour (<a href="https://vercel.com/docs/cron-jobs/usage-and-pricing">docs</a>).</td><td>Rejected: cannot do two sends a day.</td></tr>
+  <tr><td>Cloudflare Workers cron / AWS EventBridge</td><td>Precise, free tiers fit, more setup.</td><td><b>Fallback.</b></td></tr>
 </table>
-<p>Cron <code>5 11,12,16,17 * * *</code> covers 7:05 and 12:05 America/New_York in both EDT and EST; the off-season twin exits at the slot gate. A 1-hour grace window absorbs GitHub queue delay.</p>
 
 <h2>5. Auth, secrets &amp; privacy</h2>
 <ul>
-  <li>Scopes: <code>calendar.readonly</code>, <code>gmail.readonly</code>, <code>gmail.send</code>. It cannot modify or delete anything.</li>
-  <li>The OAuth consent screen must be <b>In production</b>; “Testing” refresh tokens expire after 7 days, and tokens issued before publishing keep that limit, so authorize <em>after</em> publishing (<a href="https://www.unipile.com/google-oauth-refresh-token/">ref</a>). Gmail scopes are “restricted”; a one-user unverified app shows a warning screen but is intended to work — I'll confirm on first run.</li>
-  <li>Secrets live only in GitHub Actions secrets: Google client id/secret/refresh token, Pushover keys. Private repo is required because dry-run logs print mail subjects.</li>
-  <li>Logs will print counts and categories only, never subjects or bodies, on scheduled runs.</li>
+  <li>Google scopes: <code>calendar.readonly</code>, <code>gmail.readonly</code>, <code>gmail.send</code>. It cannot modify or delete anything. Consent screen must be <b>In production</b>, and you authorize <em>after</em> publishing, or tokens die in 7 days (<a href="https://www.unipile.com/google-oauth-refresh-token/">ref</a>).</li>
+  <li>Secrets (GitHub Actions only): Google client id/secret, one refresh token per Gmail account, <code>TELEGRAM_BOT_TOKEN</code>, <code>TELEGRAM_CHAT_ID</code>.</li>
+  <li>Private repo: required, since dry-run logs print the brief. The workflow has <code>contents: write</code> solely to update the state branch.</li>
+  <li>Telegram: messages to a bot are stored on Telegram's servers (not end-to-end encrypted). Health items are reduced to a count there; bills still show amounts. Turn on <code>telegram_redact_health</code> (default) or move amounts to email only if that bothers you.</li>
+  <li>Only your own chat id can receive messages; the bot token is never printed.</li>
 </ul>
 
-<h2>6. Problems to fix</h2>
+<h2>6. Problems: status</h2>
 <table>
-  <tr><th>#</th><th>Problem</th><th>Severity</th><th>Fix</th></tr>
-  <tr><td>1</td><td>A skipped or late run silently drops that window's mail (fixed 7am/noon windows).</td><td class="bad">High</td><td>Window starts at the last brief sent, found by searching Gmail for the brief's own subject (stateless, read-only).</td></tr>
-  <tr><td>2</td><td>No alert on failure. A revoked token, 60-day pause, or API error produces silence.</td><td class="bad">High</td><td><code>if: failure()</code> step pushes an alert; separate watchdog workflow checks at 9am/1pm that a brief exists.</td></tr>
-  <tr><td>3</td><td>Homework detection is a broad regex (“project”, “final”, “reading”, “due” match unrelated events).</td><td class="warn">Medium</td><td>Canvas-calendar-as-source (§3); regex limited to non-Canvas calendars.</td></tr>
-  <tr><td>4</td><td>Same bill reappears in every brief; no “already told you” memory.</td><td class="ok">Built</td><td>Unpaid-bill ledger: a due notice persists until a later “paid” notice settles it, and is not repeated under new mail (§3b).</td></tr>
-  <tr><td>5</td><td>Excluding Promotions/Social tabs can hide real statements Gmail mis-files.</td><td class="warn">Medium</td><td>Keep exclusion, but always include mail from allow-listed financial/medical senders regardless of tab.</td></tr>
-  <tr><td>6</td><td>Noisy rules: “verification code”, “delivered”, “appointment” fire on junk.</td><td class="warn">Medium</td><td>Tune on your real mail during a one-week dry run; add a “seen but uncategorised from known senders” footer to spot gaps.</td></tr>
-  <tr><td>7</td><td>Search returns max 100 messages; heavy days truncate.</td><td>Low</td><td>Paginate; cap with a “+N more” line.</td></tr>
-  <tr><td>8</td><td>Only email delivery exists; no iMessage/push.</td><td class="bad">High</td><td>Dispatcher with channels (§2) and a short-format renderer.</td></tr>
-  <tr><td>9</td><td>Repo visibility unknown; dry-run output contains mail subjects.</td><td class="warn">Medium</td><td>Private repo; metadata-only logs.</td></tr>
-  <tr><td>10</td><td>No real-data testing yet — all tests use a fake Google client.</td><td class="warn">Medium</td><td>Add anonymised fixtures from your real inbox; run a dry run before enabling sends.</td></tr>
+  <tr><th>#</th><th>Problem</th><th>Status</th><th>How</th></tr>
+  <tr><td>1</td><td>A skipped or late run silently drops mail</td><td class="ok">Built</td><td>State branch: next brief covers everything since the last one (≤3 days).</td></tr>
+  <tr><td>2</td><td>No alert when it fails or never runs</td><td class="warn">Partly</td><td>Failures exit non-zero (GitHub emails you); a failing channel is named in the email. <b>Still to build:</b> watchdog for “no brief at all”.</td></tr>
+  <tr><td>3</td><td>Homework detection was a broad regex</td><td class="ok">Built</td><td>Canvas calendars as source, course aliases, deadline hints, duplicate merge.</td></tr>
+  <tr><td>4</td><td>Bills repeat; no memory</td><td class="ok">Built</td><td>Unpaid-bill ledger plus seen-ids in state.</td></tr>
+  <tr><td>5</td><td>Promotions/Social exclusion can hide real statements</td><td class="warn">Open</td><td>Fix: always include allow-listed biller senders regardless of tab.</td></tr>
+  <tr><td>6</td><td>Noisy generic rules</td><td class="warn">Mostly</td><td>Biller rules cut most noise; tune after a week of real briefs.</td></tr>
+  <tr><td>7</td><td>Gmail search returns max 100 messages</td><td class="warn">Open</td><td>Paginate; add “+N more”.</td></tr>
+  <tr><td>8</td><td>Delivery was email-only</td><td class="ok">Built</td><td>Telegram + email, independent channels.</td></tr>
+  <tr><td>9</td><td>Brief text exposed in logs</td><td class="ok">Mitigated</td><td>Private repo; real runs print only a one-line summary.</td></tr>
+  <tr><td>10</td><td>Never run against real data</td><td class="warn">Open</td><td>Rules were replayed on ~35 real subjects, calendars inspected; first live dry run still pending.</td></tr>
+  <tr><td>11</td><td>Prayer/moon calendars flooding the day</td><td class="ok">Built</td><td>Compact line and exclusion.</td></tr>
+  <tr><td>12</td><td>Timezone</td><td class="ok">Fixed</td><td>America/Los_Angeles; cron covers PDT and PST.</td></tr>
 </table>
 
 <h2>7. Money &amp; banks</h2>
@@ -171,20 +196,18 @@
 <h2>8. Build order</h2>
 <table>
   <tr><th>Phase</th><th>Scope</th><th>Cost</th></tr>
-  <tr><td><span class="chip">0</span> done</td><td>MVP: calendar + Gmail rules → email; tests; workflow.</td><td>$0</td></tr>
-  <tr><td><span class="chip">1</span> next</td><td>Problems #1, #2, #3, #9: catch-up window, failure alert + watchdog, Canvas-calendar homework, private-repo logging.</td><td>$0</td></tr>
-  <tr><td><span class="chip">2</span></td><td>Delivery: short renderer, Pushover push, email-triggered iMessage Shortcut (you build/test on phone, I supply the exact email format + steps).</td><td>$4.99 once</td></tr>
-  <tr><td><span class="chip">3</span></td><td>Rule tuning on real mail (#4–#7, #10), one-week dry-run.</td><td>$0</td></tr>
-  <tr><td><span class="chip">4</span></td><td>Optional: weather (NWS API, free), SimpleFIN balances, paid iMessage API if the Shortcut bridge isn't reliable.</td><td>$0 – $15/yr – ~$39/mo</td></tr>
+  <tr><td><span class="chip">0–3</span> done in code</td><td>Calendar + Gmail rules, biller templates, unpaid-bill ledger, multi-account, Telegram + email, Bruno phrase bank, state branch, Canvas homework, Pacific time. 9 tests pass against a fake Google.</td><td>$0</td></tr>
+  <tr><td><span class="chip">4</span> you</td><td>Setup: Google Cloud project + OAuth (per account), Telegram bot, GitHub secrets, make repo private, merge so the schedule activates.</td><td>$0</td></tr>
+  <tr><td><span class="chip">5</span> next</td><td>First live dry run; fix whatever real data breaks; watchdog; Gmail pagination; allow-listed senders.</td><td>$0</td></tr>
+  <tr><td><span class="chip">6</span> optional</td><td>Weather (NWS, free), SimpleFIN balances (~$15/yr), iMessage bridge, external pinger for punctual triggers.</td><td>$0 – $15/yr</td></tr>
 </table>
 
-<h2>9. What I need from you</h2>
+<h2>9. What I still need from you</h2>
 <ul>
-  <li>Confirm the repo is (or will be) <b>private</b>.</li>
-  <li>The name of the Google Calendar that holds the Canvas feed.</li>
-  <li>Is your iPhone generally on and online at 7am and noon? (The Shortcut bridge depends on it.)</li>
-  <li>OK to spend $4.99 on Pushover, or prefer free ntfy?</li>
-  <li>Your timezone (assumed America/New_York).</li>
+  <li>The other Gmail addresses to cover (I could only read <code>zshake21@gmail.com</code>), and any billers that mail to them.</li>
+  <li>Bruno or Jarvis as the default name? (One config line.)</li>
+  <li>Fine with Telegram's non-E2E storage for bill amounts, or should amounts go email-only?</li>
+  <li>Do you want class polls and advising notices from the Canvas feed excluded from homework?</li>
 </ul>
 
 <h2>Sources</h2>

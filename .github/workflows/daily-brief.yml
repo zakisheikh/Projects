@@ -1,36 +1,60 @@
 name: daily-brief
 on:
   schedule:
-    # 7am and 12pm America/New_York. Each fires at both the EDT and EST UTC hour;
-    # the script only sends when local time is inside a slot, so DST needs no edits.
-    - cron: "5 11,12,16,17 * * *"
+    # 7am and 12pm America/Los_Angeles. Each slot fires at both the PDT and PST UTC hour
+    # (7am = 14/15 UTC, noon = 19/20 UTC); the script only sends when local time is inside a slot.
+    # Minute 17 avoids the top-of-hour crush when GitHub's scheduler is busiest.
+    - cron: "17 14,15,19,20 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Print instead of emailing"
+        description: "Print instead of sending"
         type: boolean
         default: true
 permissions:
-  contents: read
+  contents: write        # only used to update the brief-state branch
 concurrency: daily-brief
 jobs:
   brief:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    defaults:
-      run:
-        working-directory: daily-brief
     steps:
       - uses: actions/checkout@v4
+      - name: Ensure state branch exists
+        run: |
+          if ! git ls-remote --exit-code --heads origin brief-state >/dev/null; then
+            git config user.name "daily-brief"; git config user.email "daily-brief@users.noreply.github.com"
+            git checkout --orphan brief-state
+            git rm -rf . >/dev/null
+            echo '{}' > state.json
+            git add state.json && git commit -qm "init state" && git push origin brief-state
+            git checkout -f "${GITHUB_SHA}"
+          fi
+      - uses: actions/checkout@v4
+        with:
+          ref: brief-state
+          path: state
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - run: python -m unittest discover -s tests -t .
+      - name: Tests
+        working-directory: daily-brief
+        run: python -m unittest discover -s tests -t .
       - name: Send brief
+        working-directory: daily-brief
         env:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
           GOOGLE_REFRESH_TOKEN_2: ${{ secrets.GOOGLE_REFRESH_TOKEN_2 }}
           GOOGLE_REFRESH_TOKEN_3: ${{ secrets.GOOGLE_REFRESH_TOKEN_3 }}
-        run: python -m brief ${{ github.event_name == 'workflow_dispatch' && '--force' || '' }} ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '--dry-run' || '' }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python -m brief --state ../state/state.json ${{ github.event_name == 'workflow_dispatch' && '--force' || '' }} ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '--dry-run' || '' }}
+      - name: Save state
+        if: always()
+        working-directory: state
+        run: |
+          git config user.name "daily-brief"; git config user.email "daily-brief@users.noreply.github.com"
+          git add state.json
+          git diff --cached --quiet || { git commit -qm "state $(date -u +%FT%TZ)" && git push origin HEAD:brief-state; }
