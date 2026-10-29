@@ -80,6 +80,9 @@ def to_paragraphs(blocks):
             if not blk.in_priority and blk.text:
                 out.append(blk.text)
             continue
+        if blk.key == "greeting":
+            out.append(blk.text)
+            continue
         if blk.items:
             para = bullets(blk.lead, [i.text for i in blk.items])
             if blk.notes:
@@ -180,7 +183,7 @@ class Narrator:
         v, blocks = self.v, []
         greeting = v.say("greet_morning" if slot < 12 else "greet_noon")
         aside = v.maybe(f"dow_{now.weekday()}", 0.5)
-        blocks.append(Block("greeting", text=greeting + (" " + aside if aside else "")))
+        blocks.append(Block("greeting", text=greeting + (" " + aside if aside else ""), notes=[greeting]))   # notes[0]: greeting alone
 
         # bills (one entry per biller); the sentence is what Telegram says
         bills = self.followups(b)
