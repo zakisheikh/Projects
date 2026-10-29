@@ -39,4 +39,5 @@ HTTPServer(("127.0.0.1", PORT), H).handle_request()
 body = urllib.parse.urlencode({"code": got["code"][0], "client_id": cid, "client_secret": secret,
                                "redirect_uri": REDIRECT, "grant_type": "authorization_code"}).encode()
 tok = json.load(urllib.request.urlopen(urllib.request.Request(TOKEN_URL, data=body)))
-print("\nGOOGLE_REFRESH_TOKEN =", tok["refresh_token"])
+print("\nRefresh token for the account you just approved (store it as the secret named in config.toml, e.g. GOOGLE_REFRESH_TOKEN_2):\n", tok["refresh_token"])
+print("Run this once per Gmail account, signing in as that account each time.")

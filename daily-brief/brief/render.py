@@ -5,9 +5,13 @@ TITLES = {
     "today": "Rest of today",
     "tomorrow": "Tomorrow",
     "homework": "Homework / due soon",
+    "dues": "Upcoming payments (unpaid)",
     "health": "Health & medical",
-    "card": "Credit cards",
-    "bill": "Bills",
+    "bills": "New bills & statements",
+    "paid": "Payments confirmed",
+    "balances": "Card & bank balances",
+    "receipts": "Receipts",
+    "info": "Other account notices",
     "school": "School mail",
     "security": "Security",
     "logistics": "Deliveries & travel",
@@ -25,14 +29,20 @@ def event_line(ev, with_day=False):
     return f"{day}{fmt_time(ev)}  {ev.title}{loc}"
 
 
-def mail_line(m):
-    who = m.sender.split("<")[0].strip().strip('"') or m.sender
+def sender_name(m):
+    return m.sender.split("<")[0].strip().strip('"') or m.sender
+
+
+def mail_line(m, who=None):
+    name = who or sender_name(m)
     extra = ""
     if m.amount:
         extra += f"  [{m.amount}]"
     if m.due:
         extra += f"  [due {m.due.strftime('%a %-m/%-d')}]"
-    return f"{who[:28]}: {m.subject[:90]}{extra}"
+    if m.note:
+        extra += f"  [{m.note}]"
+    return f"{name[:28]}: {m.subject[:80]}{extra}"
 
 
 def build(sections, header, footer):

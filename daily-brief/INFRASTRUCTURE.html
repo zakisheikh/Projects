@@ -40,7 +40,7 @@
 <body>
 <main>
 <h1>Daily Brief — infrastructure plan</h1>
-<p class="sub">Rule-based (no AI) 7am + noon briefing, delivered to iMessage. Revision 2 · private GitHub repo · target cost $0, ceiling a couple dollars a month.</p>
+<p class="sub">Rule-based (no AI) 7am + noon briefing, delivered to iMessage. Revision 3 · private GitHub repo · target cost $0, ceiling a couple dollars a month.</p>
 
 <div class="grid">
   <div class="card"><b>Runs on</b>GitHub Actions cron in a private repo. Nothing of yours needs to be awake.</div>
@@ -100,6 +100,39 @@
   <li><b>Assumption to check:</b> subscribed calendars are readable through the Calendar API like any other calendar. I expect so, but I'll confirm during the first dry run.</li>
 </ul>
 
+<h2>3b. Bills &amp; money: rules learned from your real mail</h2>
+<p>I searched the connected Gmail (read-only) for the last year of bill, statement, rent, insurance and medical mail and turned what I found into <code>[[billers]]</code> in <code>config.toml</code> (sender + subject templates only; no account numbers or amounts are stored in the repo). I replayed ~35 real subject lines through the rules to check them.</p>
+<table>
+  <tr><th>Biller</th><th>What the mail looks like</th><th>How it is handled</th></tr>
+  <tr><td>Chase cards</td><td>“…payment is due on Oct 20, 2026” (date in subject; body has min payment, statement balance, <b>Autopay Off</b>); “statement is available”; “…balance is $X” sent every few days; “received your payment”</td><td>due → tracked until a later “paid”; autopay-off flagged; balance alerts collapsed to the latest one; marketing from <code>mcmap.chase.com</code> dropped</td></tr>
+  <tr><td>Synchrony (Verizon Visa)</td><td>“payment is due soon”, “monthly statement is ready”, “You Scheduled a Payment”; rewards promos</td><td>due / statement / paid; promos dropped</td></tr>
+  <tr><td>Fairwinds, Bank of America</td><td>“statement is ready/available”</td><td>statement (due date read from body if present)</td></tr>
+  <tr><td>Rent (Essex / RentCafé)</td><td>“Your Rent Payment is Due Soon”; body says “rent is due today, October 1st”, <b>no amount</b></td><td>due date parsed from “due today, &lt;month day&gt;”; shown as DUE without an amount</td></tr>
+  <tr><td>Utilities (Conservice)</td><td>“Your utility statement due on 11/1/2026”; “Total Current Charges $…”</td><td>due date and total read from the body</td></tr>
+  <tr><td>Renters insurance (Mercury)</td><td>“new … insurance bill”; body gives no amount or date</td><td>listed as a new bill; autopay flag if “NON auto pay”</td></tr>
+  <tr><td>Verizon wireless</td><td>“Thanks! We received your payment” (autopay confirmation), plus promos</td><td>paid (amount read); promos dropped</td></tr>
+  <tr><td>Health (Aetna EOB, urgent-care billing)</td><td>“Your Explanation of Benefits”; paperless-billing notices; marketing</td><td>EOB listed under Health; notices and marketing dropped</td></tr>
+  <tr><td>Receipts (Anthropic, United, Google Play, Apple, Booking, Hertz)</td><td>“Your receipt from …”</td><td>counted in one line, not listed</td></tr>
+  <tr><td>Person-to-person (camp invoice, Venmo)</td><td>“Invoice … PAYMENT IS NOW OVERDUE”</td><td>generic rules: invoice/overdue → ALERT</td></tr>
+</table>
+<h3>New behavior this enables</h3>
+<ul>
+  <li><b>Unpaid-bill ledger</b> (fixes problem #4): the job looks back 40 days for “payment due” notices and keeps each on the list until a later “payment received” from the same biller settles it. Items due within 3 days (or overdue) go under <em>Needs attention</em>, later ones under <em>Upcoming payments</em>.</li>
+  <li>Noise cut: about 25 Chase balance emails in 6 months become one line; promos from banks and carriers disappear.</li>
+  <li><b>Known gaps:</b> the rent notice has no amount; Mercury has no due date; lease/e-sign emails (“Document is Ready to Sign”) are not bills, so they only surface if Gmail marks them important. Due dates that live only in HTML buttons or PDFs cannot be read.</li>
+  <li>Billers not visible in this inbox (internet, car loan, tuition, other cards) need a block added when their first notice shows up; the README explains how.</li>
+</ul>
+
+<h2>3c. Multiple Gmail accounts</h2>
+<ul>
+  <li><b>Design:</b> <code>[[accounts]]</code> in config; one OAuth client, one refresh token per login (<code>GOOGLE_REFRESH_TOKEN</code>, <code>_2</code>, <code>_3</code> secrets). Mail, calendars and the bill ledger are collected per account, merged, and tagged <code>[name]</code> in the brief.</li>
+  <li><b>Sending:</b> the brief is sent from one account (<code>send_from = true</code>) to your inbox; the others only need read access.</li>
+  <li><b>Dedupe:</b> a calendar shared across logins shows each event once.</li>
+  <li><b>Isolation:</b> if one login's token is revoked, that account appears as <code>ACCOUNT …</code> under Needs attention and the others still report.</li>
+  <li><b>Setup cost:</b> run <code>auth_setup.py</code> once per account, signing in as that account; each extra Gmail must be a test user or the consent screen must be published.</li>
+  <li><b>Not done yet:</b> the only Gmail I could read was <code>zshake21@gmail.com</code>. Biller rules for your other accounts need that mail sampled, or you can tell me which senders to expect.</li>
+</ul>
+
 <h2>4. Hosting &amp; scheduling</h2>
 <table>
   <tr><th>Option</th><th>Finding</th><th>Decision</th></tr>
@@ -123,7 +156,7 @@
   <tr><td>1</td><td>A skipped or late run silently drops that window's mail (fixed 7am/noon windows).</td><td class="bad">High</td><td>Window starts at the last brief sent, found by searching Gmail for the brief's own subject (stateless, read-only).</td></tr>
   <tr><td>2</td><td>No alert on failure. A revoked token, 60-day pause, or API error produces silence.</td><td class="bad">High</td><td><code>if: failure()</code> step pushes an alert; separate watchdog workflow checks at 9am/1pm that a brief exists.</td></tr>
   <tr><td>3</td><td>Homework detection is a broad regex (“project”, “final”, “reading”, “due” match unrelated events).</td><td class="warn">Medium</td><td>Canvas-calendar-as-source (§3); regex limited to non-Canvas calendars.</td></tr>
-  <tr><td>4</td><td>Same bill reappears in every brief; no “already told you” memory.</td><td class="warn">Medium</td><td>Show a bill again only if newly arrived or due ≤3 days; use the prior brief's content (via Gmail) as dedupe memory.</td></tr>
+  <tr><td>4</td><td>Same bill reappears in every brief; no “already told you” memory.</td><td class="ok">Built</td><td>Unpaid-bill ledger: a due notice persists until a later “paid” notice settles it, and is not repeated under new mail (§3b).</td></tr>
   <tr><td>5</td><td>Excluding Promotions/Social tabs can hide real statements Gmail mis-files.</td><td class="warn">Medium</td><td>Keep exclusion, but always include mail from allow-listed financial/medical senders regardless of tab.</td></tr>
   <tr><td>6</td><td>Noisy rules: “verification code”, “delivered”, “appointment” fire on junk.</td><td class="warn">Medium</td><td>Tune on your real mail during a one-week dry run; add a “seen but uncategorised from known senders” footer to spot gaps.</td></tr>
   <tr><td>7</td><td>Search returns max 100 messages; heavy days truncate.</td><td>Low</td><td>Paginate; cap with a “+N more” line.</td></tr>

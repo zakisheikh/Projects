@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from .models import Event, Mail
 
 
-def parse_event(raw, calendar, tz: ZoneInfo, hw_re):
+def parse_event(raw, calendar, tz: ZoneInfo, hw_re, all_homework=False):
     s, e = raw["start"], raw["end"]
     all_day = "date" in s
     if all_day:
@@ -21,7 +21,7 @@ def parse_event(raw, calendar, tz: ZoneInfo, hw_re):
     title = raw.get("summary", "(no title)")
     text = f"{title} {raw.get('description', '')}"
     return Event(title, start, end, all_day, calendar, raw.get("location", ""),
-                 bool(hw_re.search(text)))
+                 all_homework or bool(hw_re.search(text)))
 
 
 def _walk(part):

@@ -27,3 +27,9 @@ class Mail:
     categories: list = field(default_factory=list)
     amount: Optional[str] = None
     due: Optional[date] = None
+    account: str = ""
+    biller: Optional[str] = None
+    kind: str = ""
+    event: Optional[str] = None   # due|statement|paid|balance|alert|receipt|info
+    note: str = ""
+    ignored: bool = False

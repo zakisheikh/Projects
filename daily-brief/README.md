@@ -43,6 +43,18 @@ python3 -m brief --force --dry-run
 python3 -m unittest discover -s tests -t .
 ```
 
+## Multiple Gmail accounts
+List each login under `[[accounts]]` in `config.toml` with its own `token_env`. Use the same OAuth client for all: run
+`auth_setup.py` once per account (sign in as that account), then add a secret per account (`GOOGLE_REFRESH_TOKEN`, `GOOGLE_REFRESH_TOKEN_2`, …;
+the workflow already forwards `_2` and `_3`). Mail, calendars and bills from all accounts are merged and tagged `[name]`;
+a calendar shared between logins appears once; one broken login is reported under *Needs attention* instead of killing the brief.
+
+## Bills
+`[[billers]]` in `config.toml` are sender + subject templates learned from real notices (Chase, Synchrony, rent, utilities, insurance, health, …).
+Each notice becomes an event (due / statement / paid / balance / alert / receipt / ignore). A "payment due" notice stays on the
+*Upcoming payments* list for `lookback_days` until a later "payment received" notice from the same biller settles it; autopay-off is flagged.
+To add a biller, copy a block and replay it against a real subject line.
+
 ## Notes / limits
 - Homework is inferred from calendar event titles/descriptions matching `homework_pattern`, plus school-sender mail.
 - Classification looks at subject + Gmail snippet; amounts/due dates for bills are read from the full body.

@@ -1,19 +1,24 @@
 """Rule-based classification. Deterministic: same input, same output."""
 import re
-from datetime import date
+from datetime import date, timedelta
 
 MONTHS = "jan feb mar apr may jun jul aug sep oct nov dec".split()
-AMOUNT = re.compile(r"(?i)(?:amount (?:due|you owe)|balance(?: due)?|total due|minimum payment(?: due)?|payment due|you owe)[^$\d]{0,40}\$\s?([\d,]+\.\d{2})")
+AMOUNT_KEYS = ["total current charges", "amount you owe", "amount due", "total due", "balance due",
+               "minimum payment due", "minimum payment", "payment amount", "current charges", "payment due"]
 ANY_AMOUNT = re.compile(r"\$\s?([\d,]+\.\d{2})")
-DUE = re.compile(r"(?i)(?:due(?: on| by| date)?|pay by|payment date)[:\s]+(?:[a-z]{3,9},?\s+)?"
+DUE = re.compile(r"(?i)\bdue(?: on| by| date)?[:\s|]+(?:[a-z]{3,9},?\s+)?"
                  r"(?:(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?|([a-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?)")
+REL = re.compile(r"(?i)\bdue (today|tomorrow)\b(?:,?\s+([a-z]{3,9})\.?\s+(\d{1,2}))?")
+AUTOPAY = re.compile(r"(?i)\bnon[- ]?auto ?pay\b|\bauto-?\s?pay(?:ment)?s?\s*[:\-|]?\s*(on|off)\b")
 
 
 def compile_rules(cfg):
-    return {name: [re.compile(p) for p in r.get("sender", [])] +
-                  [re.compile(p) for p in r.get("text", [])]
-            for name, r in cfg["mail"]["rules"].items()}, \
-           {name: len(r.get("sender", [])) for name, r in cfg["mail"]["rules"].items()}
+    """Generic keyword categories (health, school, security, ...). Returns (rules, n_sender)."""
+    rules, n_sender = {}, {}
+    for name, r in cfg["mail"]["rules"].items():
+        rules[name] = [re.compile(p) for p in r.get("sender", [])] + [re.compile(p) for p in r.get("text", [])]
+        n_sender[name] = len(r.get("sender", []))
+    return rules, n_sender
 
 
 def categorize(mail, rules, n_sender):
@@ -26,7 +31,26 @@ def categorize(mail, rules, n_sender):
         t_hit = any(p.search(f"{mail.subject} {mail.snippet}") for p in pats[k:])
         if t_hit or (s_hit and name == "school"):
             cats.append(name)
+    if "receipt" in cats:
+        cats = [c for c in cats if c != "bill"]
     return cats
+
+
+def compile_billers(cfg):
+    return [dict(name=b["name"], kind=b.get("kind", "bill"), frm=re.compile(b["from"]),
+                 rules=[(re.compile(r["subject"]), r["event"]) for r in b["rules"]])
+            for b in cfg.get("billers", [])]
+
+
+def match_biller(mail, billers):
+    """First biller whose sender matches AND whose subject rule matches -> (name, kind, event)."""
+    for b in billers:
+        if not b["frm"].search(mail.sender):
+            continue
+        for pat, event in b["rules"]:
+            if pat.search(mail.subject):
+                return b["name"], b["kind"], event
+    return None
 
 
 def _num(s):
@@ -34,24 +58,55 @@ def _num(s):
 
 
 def extract_amount(text):
-    m = AMOUNT.search(text)
+    for key in AMOUNT_KEYS:
+        m = re.search(key + r"[^$]{0,80}\$\s?([\d,]+\.\d{2})", text, re.I)
+        if m:
+            return f"${_num(m.group(1)):,.2f}"
+    return None
+
+
+def first_amount(text):
+    m = ANY_AMOUNT.search(text)
     return f"${_num(m.group(1)):,.2f}" if m else None
 
 
-def extract_due(text, today: date):
-    m = DUE.search(text)
+def extract_autopay(text):
+    m = AUTOPAY.search(text)
     if not m:
         return None
+    return "autopay on" if (m.group(1) or "").lower() == "on" else "autopay OFF"
+
+
+def _month(name):
+    n = name[:3].lower()
+    return MONTHS.index(n) + 1 if n in MONTHS else None
+
+
+def extract_due(text, ref: date):
+    """ref = date the message was sent; used for 'due today/tomorrow' and missing years."""
     try:
-        if m.group(1):
-            mo, d, y = int(m.group(1)), int(m.group(2)), m.group(3)
-            y = (2000 + int(y) if y and len(y) == 2 else int(y)) if y else today.year
-        else:
-            mo = MONTHS.index(m.group(4)[:3].lower()) + 1
-            d, y = int(m.group(5)), int(m.group(6) or today.year)
-        out = date(y, mo, d)
-        if not (m.group(3) or m.group(6)) and (today - out).days > 180:
-            out = out.replace(year=out.year + 1)
-        return out
+        m = DUE.search(text)
+        if m:
+            if m.group(1):
+                mo, d, y = int(m.group(1)), int(m.group(2)), m.group(3)
+                y = (2000 + int(y) if len(y) == 2 else int(y)) if y else ref.year
+            else:
+                mo = _month(m.group(4))
+                if mo is None:
+                    raise ValueError
+                d, y = int(m.group(5)), int(m.group(6) or ref.year)
+            out = date(y, mo, d)
+            if not (m.group(3) or m.group(6)) and (ref - out).days > 180:
+                out = out.replace(year=out.year + 1)
+            return out
+        m = REL.search(text)
+        if m:
+            base = ref + timedelta(days=1 if m.group(1).lower() == "tomorrow" else 0)
+            mo = _month(m.group(2)) if m.group(2) else None
+            if mo:
+                out = date(ref.year, mo, int(m.group(3)))
+                return out.replace(year=out.year + 1) if (ref - out).days > 180 else out
+            return base
     except (ValueError, IndexError):
-        return None
+        pass
+    return None

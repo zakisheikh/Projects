@@ -1,31 +1,179 @@
 # Everything the brief does is driven by rules in this file. No AI involved.
 timezone = "America/New_York"
 slots = [7, 12]          # local hours at which a brief is sent
-recipient = ""           # empty = send to the authenticated Google account
+recipient = ""           # empty = the primary account's own address
+
+# One entry per Gmail/Calendar login. Each needs its own refresh token secret
+# (run auth_setup.py once per account). The first account with send_from=true sends the brief.
+[[accounts]]
+name = "main"
+token_env = "GOOGLE_REFRESH_TOKEN"
+send_from = true
+# [[accounts]]
+# name = "other"
+# token_env = "GOOGLE_REFRESH_TOKEN_2"
 
 [calendar]
 exclude_calendars = ["Holidays in United States", "Birthdays"]
-lookahead_days = 7       # window for the "homework / due soon" section
-homework_pattern = '(?i)\b(homework|assignment|hw ?\d*|due|quiz|exam|midterm|final|essay|problem set|pset|lab report|project|reading|worksheet|submit)\b'
+lookahead_days = 7
+# Calendars whose every event is an assignment (e.g. the subscribed Canvas feed). Fill in the calendar's name.
+homework_calendars = []
+# For all other calendars, events matching this are treated as homework.
+homework_pattern = '(?i)\b(homework|assignment|hw ?\d+|quiz|exam|midterm|essay|problem set|pset|lab report|worksheet)\b'
+
+[bills]
+lookback_days = 40       # how far back to look for an unpaid "payment due" notice
+due_soon_days = 3        # "needs attention" when due within this many days (or overdue)
 
 [mail]
 max_per_section = 8
-# Matched against "from + subject + snippet", case-insensitive regexes.
+
+# ---------------------------------------------------------------------------
+# Billers: learned from real mail. A biller matches on SENDER, then each rule matches the
+# SUBJECT in order; first hit wins. events:
+#   due        a payment is coming due (amount/due date read from the body, autopay flagged)
+#   statement  a statement/bill is available
+#   paid       payment received/scheduled/confirmed (also settles an earlier "due")
+#   balance    periodic balance alert (collapsed to the latest one)
+#   alert      fraud / declined / needs action -> Needs attention
+#   receipt    counted, not listed;   info  listed under Other;   ignore  dropped
+# ---------------------------------------------------------------------------
+[[billers]]
+name = "Chase"
+kind = "card"
+from = '(?i)no\.?reply\.?alerts@chase\.com'
+rules = [
+  { subject = '(?i)payment is due', event = "due" },
+  { subject = '(?i)statement is available', event = "statement" },
+  { subject = '(?i)(received|posted|scheduled) your .*payment|payment (was )?(received|posted|scheduled)', event = "paid" },
+  { subject = '(?i)balance is \$', event = "balance" },
+  { subject = '(?i)fraud|unusual|suspicious|declin|security|locked', event = "alert" },
+  { subject = '(?i)credit limit|offer|reward', event = "ignore" },
+  { subject = '(?i)new letter', event = "info" },
+]
+[[billers]]
+name = "Chase offers"
+kind = "card"
+from = '(?i)mcmap\.chase\.com|chasetravel\.com'
+rules = [{ subject = '.', event = "ignore" }]
+
+[[billers]]
+name = "Synchrony"
+kind = "card"
+from = '(?i)synchrony(bank)?\.com'
+rules = [
+  { subject = '(?i)payment is due|payment due', event = "due" },
+  { subject = '(?i)statement is ready', event = "statement" },
+  { subject = '(?i)scheduled a payment|payment (received|posted)|thank', event = "paid" },
+  { subject = '.', event = "ignore" },
+]
+[[billers]]
+name = "Fairwinds"
+kind = "card"
+from = '(?i)fairwinds\.org'
+rules = [
+  { subject = '(?i)payment.*due|due', event = "due" },
+  { subject = '(?i)statement', event = "statement" },
+]
+[[billers]]
+name = "Bank of America"
+kind = "card"
+from = '(?i)bankofamerica\.com'
+rules = [
+  { subject = '(?i)payment.*due', event = "due" },
+  { subject = '(?i)statement is available', event = "statement" },
+  { subject = '(?i)fraud|declin|alert|unusual', event = "alert" },
+]
+[[billers]]
+name = "Patelco"
+kind = "bank"
+from = '(?i)patelco\.org|services\.pscu\.com'
+rules = [
+  { subject = '(?i)balance summary', event = "balance" },
+  { subject = '(?i)fraud|declin|unusual|overdraft|low balance', event = "alert" },
+]
+[[billers]]
+name = "Verizon"
+kind = "phone"
+from = '(?i)verizonwireless\.com|verizon\.com'
+rules = [
+  { subject = '(?i)received your payment|payment confirmed', event = "paid" },
+  { subject = '(?i)bill is (ready|available)|payment.*due|past due', event = "due" },
+  { subject = '.', event = "ignore" },
+]
+[[billers]]
+name = "Rent"
+kind = "rent"
+from = '(?i)@essex\.com|rentcafe\.com|appfolio'
+rules = [
+  { subject = '(?i)rent payment is due|rent.*due|payment.*due', event = "due" },
+  { subject = '(?i)payment (received|confirmation)|receipt', event = "paid" },
+  { subject = '(?i)late|past due|notice', event = "alert" },
+]
+[[billers]]
+name = "Utilities (Conservice)"
+kind = "utility"
+from = '(?i)conservicemail\.com'
+rules = [{ subject = '(?i)statement', event = "due" }]
+[[billers]]
+name = "Renters insurance"
+kind = "insurance"
+from = '(?i)mercuryinsurance\.com'
+rules = [
+  { subject = '(?i)new .*insurance bill', event = "due" },
+  { subject = '(?i)policy documents', event = "ignore" },
+]
+[[billers]]
+name = "Aetna"
+kind = "health"
+from = '(?i)aetna\.com'
+rules = [
+  { subject = '(?i)explanation of benefits', event = "statement" },
+  { subject = '.', event = "ignore" },
+]
+[[billers]]
+name = "AFC Urgent Care"
+kind = "health"
+from = '(?i)afcurgentcare'
+rules = [
+  { subject = '(?i)paperless|your visit', event = "ignore" },
+  { subject = '(?i)bill|balance|statement|amount', event = "due" },
+]
+[[billers]]
+name = "Venmo"
+kind = "p2p"
+from = '(?i)venmo\.com'
+rules = [
+  { subject = '(?i)requests|charged you|reminder', event = "due" },
+  { subject = '(?i)you paid|completed|you received|sent you', event = "receipt" },
+]
+[[billers]]
+name = "Receipts"
+kind = "receipt"
+from = '(?i)(invoice|receipts?)@(mail\.)?(anthropic|united)\.com|googleplay-noreply|orders\.apple\.com|noreply-payments@booking\.com|ziosk|hertznoreply'
+rules = [{ subject = '.', event = "receipt" }]
+
+# ---------------------------------------------------------------------------
+# Generic keyword rules: catch mail from senders not listed above. Subject/snippet only.
+# ---------------------------------------------------------------------------
 [mail.rules.health]
-sender = ['(?i)(anthem|aetna|cigna|uhc|unitedhealth|bcbs|bluecross|kaiser|quest|labcorp|myChart|zocdoc|cvs|walgreens|optum|healthequity|fsa|hsa)']
-text   = ['(?i)explanation of benefits', '(?i)\bEOB\b', '(?i)patient (balance|statement)', '(?i)amount (you owe|due)', '(?i)medical (bill|statement)', '(?i)claim (processed|denied)', '(?i)copay', '(?i)appointment']
+sender = []
+text   = ['(?i)explanation of benefits', '(?i)patient (balance|statement)', '(?i)medical (bill|statement)', '(?i)claim (processed|denied)', '(?i)\bcopay\b', '(?i)lab results?']
 [mail.rules.card]
-sender = ['(?i)(chase|amex|americanexpress|capitalone|citi|discover|synchrony|barclays|bankofamerica|wellsfargo|apple card|goldman|paypal|venmo)']
-text   = ['(?i)statement (is )?(ready|available)', '(?i)payment (is )?due', '(?i)minimum payment', '(?i)payment (received|posted|scheduled)', '(?i)(fraud|unusual|suspicious) (activity|alert|transaction)', '(?i)large (purchase|transaction)', '(?i)credit limit', '(?i)autopay']
+sender = []
+text   = ['(?i)statement (is )?(ready|available)', '(?i)minimum payment', '(?i)(fraud|unusual|suspicious) (activity|alert|transaction)', '(?i)\bautopay\b']
 [mail.rules.bill]
 sender = []
-text   = ['(?i)\binvoice\b', '(?i)past due', '(?i)amount due', '(?i)bill is (ready|available)', '(?i)payment (reminder|failed|declined)', '(?i)final notice']
+text   = ['(?i)\binvoice\b', '(?i)past due|overdue', '(?i)amount due', '(?i)bill is (ready|available)', '(?i)payment (reminder|failed|declined)', '(?i)final notice']
+[mail.rules.receipt]
+sender = []
+text   = ['(?i)\breceipt\b', '(?i)order confirmation']
 [mail.rules.school]
-sender = ['(?i)(classroom\.google|instructure|canvas|blackboard|schoology|gradescope|piazza|\.edu\b)']
-text   = ['(?i)assignment', '(?i)grade posted', '(?i)due (today|tomorrow|soon)', '(?i)missing work']
+sender = ['(?i)(classroom\.google|instructure|canvas|blackboard|schoology|gradescope|piazza)']
+text   = ['(?i)\bassignment\b', '(?i)grade posted', '(?i)missing work']
 [mail.rules.security]
 sender = []
-text   = ['(?i)security alert', '(?i)new sign-?in', '(?i)password (reset|changed)', '(?i)verification code', '(?i)account (locked|suspended)']
+text   = ['(?i)security alert', '(?i)new sign-?in', '(?i)password (reset|changed)', '(?i)account (locked|suspended)']
 [mail.rules.logistics]
 sender = []
-text   = ['(?i)out for delivery', '(?i)delivered', '(?i)flight', '(?i)reservation', '(?i)itinerary', '(?i)check-?in', '(?i)package']
+text   = ['(?i)out for delivery', '(?i)\bflight\b', '(?i)itinerary', '(?i)check-?in', '(?i)reservation']
