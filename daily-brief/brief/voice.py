@@ -23,4 +23,5 @@ class Voice:
         idx = [i for i in range(len(options)) if i != self.last.get(key)] or [0]
         i = self.rng.choice(idx)
         self.used[key] = i
-        return options[i].format(name=self.user, bot=self.bot, sir=self.address, **kw)
+        text = options[i].format(name=self.user, bot=self.bot, sir=self.address, **kw)
+        return text[:1].upper() + text[1:]
