@@ -1,0 +1,34 @@
+name: daily-brief
+on:
+  schedule:
+    # 7am and 12pm America/New_York. Each fires at both the EDT and EST UTC hour;
+    # the script only sends when local time is inside a slot, so DST needs no edits.
+    - cron: "5 11,12,16,17 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print instead of emailing"
+        type: boolean
+        default: true
+permissions:
+  contents: read
+concurrency: daily-brief
+jobs:
+  brief:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: daily-brief
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m unittest discover -s tests -t .
+      - name: Send brief
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+        run: python -m brief ${{ github.event_name == 'workflow_dispatch' && '--force' || '' }} ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '--dry-run' || '' }}

@@ -1,0 +1,31 @@
+# Everything the brief does is driven by rules in this file. No AI involved.
+timezone = "America/New_York"
+slots = [7, 12]          # local hours at which a brief is sent
+recipient = ""           # empty = send to the authenticated Google account
+
+[calendar]
+exclude_calendars = ["Holidays in United States", "Birthdays"]
+lookahead_days = 7       # window for the "homework / due soon" section
+homework_pattern = '(?i)\b(homework|assignment|hw ?\d*|due|quiz|exam|midterm|final|essay|problem set|pset|lab report|project|reading|worksheet|submit)\b'
+
+[mail]
+max_per_section = 8
+# Matched against "from + subject + snippet", case-insensitive regexes.
+[mail.rules.health]
+sender = ['(?i)(anthem|aetna|cigna|uhc|unitedhealth|bcbs|bluecross|kaiser|quest|labcorp|myChart|zocdoc|cvs|walgreens|optum|healthequity|fsa|hsa)']
+text   = ['(?i)explanation of benefits', '(?i)\bEOB\b', '(?i)patient (balance|statement)', '(?i)amount (you owe|due)', '(?i)medical (bill|statement)', '(?i)claim (processed|denied)', '(?i)copay', '(?i)appointment']
+[mail.rules.card]
+sender = ['(?i)(chase|amex|americanexpress|capitalone|citi|discover|synchrony|barclays|bankofamerica|wellsfargo|apple card|goldman|paypal|venmo)']
+text   = ['(?i)statement (is )?(ready|available)', '(?i)payment (is )?due', '(?i)minimum payment', '(?i)payment (received|posted|scheduled)', '(?i)(fraud|unusual|suspicious) (activity|alert|transaction)', '(?i)large (purchase|transaction)', '(?i)credit limit', '(?i)autopay']
+[mail.rules.bill]
+sender = []
+text   = ['(?i)\binvoice\b', '(?i)past due', '(?i)amount due', '(?i)bill is (ready|available)', '(?i)payment (reminder|failed|declined)', '(?i)final notice']
+[mail.rules.school]
+sender = ['(?i)(classroom\.google|instructure|canvas|blackboard|schoology|gradescope|piazza|\.edu\b)']
+text   = ['(?i)assignment', '(?i)grade posted', '(?i)due (today|tomorrow|soon)', '(?i)missing work']
+[mail.rules.security]
+sender = []
+text   = ['(?i)security alert', '(?i)new sign-?in', '(?i)password (reset|changed)', '(?i)verification code', '(?i)account (locked|suspended)']
+[mail.rules.logistics]
+sender = []
+text   = ['(?i)out for delivery', '(?i)delivered', '(?i)flight', '(?i)reservation', '(?i)itinerary', '(?i)check-?in', '(?i)package']
