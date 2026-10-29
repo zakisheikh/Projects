@@ -14,12 +14,12 @@ telegram_redact_health = true      # Telegram only says "N health items"; detail
 # One entry per Gmail/Calendar login. Each needs its own refresh token secret
 # (run auth_setup.py once per account). The first account with send_from=true sends the brief.
 [[accounts]]
-name = "main"
+name = "zshake21"
 token_env = "GOOGLE_REFRESH_TOKEN"
 send_from = true
-# [[accounts]]
-# name = "other"
-# token_env = "GOOGLE_REFRESH_TOKEN_2"
+[[accounts]]
+name = "zakisheikh21"
+token_env = "GOOGLE_REFRESH_TOKEN_2"
 
 [calendar]
 exclude_calendars = ["Holidays in United States", "Birthdays", "Phases of the Moon"]

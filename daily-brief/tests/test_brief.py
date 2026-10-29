@@ -102,6 +102,22 @@ def brief(google, config=None):
 
 
 class Tests(unittest.TestCase):
+    def setUp(self):
+        # Pin tests to one account regardless of how many logins config.toml lists.
+        import brief.main as bm
+        self._orig_cfg = bm.load_config
+        real = self._orig_cfg
+
+        def one_account(path=None):
+            cfg = real(path)
+            cfg["accounts"] = [{"name": "main", "token_env": "X", "send_from": True}]
+            return cfg
+        bm.load_config = one_account
+
+    def tearDown(self):
+        import brief.main as bm
+        bm.load_config = self._orig_cfg
+
     def test_slots(self):
         d = lambda h, m=0: datetime(2026, 10, 29, h, m, tzinfo=TZ)
         self.assertEqual(pick_slot(d(7, 20), [7, 12]), 7)
@@ -170,7 +186,6 @@ class Tests(unittest.TestCase):
         import tempfile, os, tomllib  # write tmp config
         # emulate via direct build: accounts dict of fakes
         g = {"main": FakeGoogle(MAIN), "other": FakeGoogle(OTHER)}
-        orig = bm.load_config
         bm.load_config = lambda path=None: cfg
         try:
             text = self.run_text(g)
@@ -182,7 +197,7 @@ class Tests(unittest.TestCase):
             self.assertIn("ACCOUNT  other", text)
             self.assertIn("Dentist", text)                      # healthy account still reported
         finally:
-            bm.load_config = orig
+            pass
 
     def test_voice_varies_and_never_repeats(self):
         from brief.voice import Voice
