@@ -8,6 +8,14 @@ name = "Bruno"           # who the messages come from (try "Jarvis"); wording li
 user = "Zaki"
 address = "sir"          # how he addresses you in phrases.toml ({sir})
 
+# Buttons at the top of the email. Add your Canvas sites here when you know their addresses.
+[[links]]
+label = "Gmail"
+url = "https://mail.google.com/mail/u/0/#inbox"
+[[links]]
+label = "Calendar"
+url = "https://calendar.google.com/calendar/r/day"
+
 [brief]
 telegram_max_priority = 3   # Telegram stays short: only this many urgent items...
 telegram_max_events = 4     # ...and this many of today's events; the rest is in the email

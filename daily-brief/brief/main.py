@@ -82,6 +82,7 @@ def enrich(g, mid, tz, account, rules, n_sender, billers, mail_user=""):
         m.amount = classify.extract_amount(text)
         m.due = classify.extract_due(text, m.when.date())
         m.note = classify.extract_autopay(text) or ""
+        m.balance = classify.extract_balance(text)
     if "action" in m.categories and not m.ignored:
         m.due = classify.extract_deadline(f"{m.subject} {m.snippet}", m.when.date())
     return m
@@ -331,7 +332,8 @@ def run(argv=None, google=None, now=None):
     footer = f"{len(mails)} new emails checked ({unread} unread)."
     text = "\n\n".join([header] + full + [footer])
     preheader = next((i.text for blk in full_blocks if blk.key == "priority" for i in blk.items if i.kind not in ("more",)), full[0])
-    html = email_html.render(full_blocks, header, now, footer, preheader=preheader)
+    links = [(x["label"], x["url"]) for x in cfg.get("links", [])]
+    html = email_html.render(full_blocks, header, now, footer, preheader=preheader, links=links)
     tg = telegram.fmt(short)
 
     if args.dry_run:

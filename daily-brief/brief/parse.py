@@ -13,6 +13,29 @@ TAG = re.compile(r"\s*\[([^\]]+)\]\s*$")
 HINT = re.compile(r"(?i)\b(?:by|before|due|until)\b[^.\n]{0,60}?(\d{1,2}(?::\d{2})?\s?[ap]\.?m\.?)")
 
 
+MD_LINK = re.compile(r"\[([^\]]+)\]\s*\(https?://[^)]+\)")
+URL = re.compile(r"https?://\S+")
+
+
+def summarize(desc, title="", limit=130):
+    """First readable sentence or two of a calendar description: links, markdown rules, brackets and
+    lines that merely repeat the title are removed."""
+    if not desc:
+        return ""
+    text = MD_LINK.sub(r"\1", unescape(re.sub(r"<[^>]+>", " ", desc)))
+    text = URL.sub("", text).replace("[", "").replace("]", "")
+    lines = [l.strip(" *-=#\t") for l in text.splitlines()]
+    lines = [l for l in lines if len(l) > 3 and not re.fullmatch(r"[\W_]+", l)]
+    words = set(re.findall(r"\w+", title.lower()))
+    while lines and words and len(set(re.findall(r"\w+", lines[0].lower())) - words) <= 1:
+        lines.pop(0)                       # "Final Project Proposal Report" under a title that already says it
+    text = re.sub(r"\s+", " ", " ".join(lines)).strip()
+    if len(text) <= limit:
+        return text
+    cut = text[:limit].rsplit(" ", 1)[0]
+    return cut.rstrip(",;:") + "…"
+
+
 def parse_event(raw, calendar, tz: ZoneInfo, hw_re, all_homework=False, compact=False, tag_is_homework=True):
     s, e = raw["start"], raw["end"]
     all_day = "date" in s
@@ -32,7 +55,7 @@ def parse_event(raw, calendar, tz: ZoneInfo, hw_re, all_homework=False, compact=
     homework = all_homework or bool(tag and tag_is_homework) or bool(hw_re.search(f"{title} {desc[:300]}"))
     return Event(title, start, end, all_day, calendar, raw.get("location", ""), homework, compact, course,
                  f"by {hint.group(1).upper().replace('.', '')}" if hint and homework else "",
-                 (raw.get("creator") or {}).get("email", "").lower())
+                 (raw.get("creator") or {}).get("email", "").lower(), False, raw.get("htmlLink", ""), summarize(desc, title))
 
 
 def _walk(part):

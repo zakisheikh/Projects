@@ -17,6 +17,8 @@ class Event:
     hint: str = ""
     creator: str = ""
     exam: bool = False
+    link: str = ""          # Google Calendar page for the event (holds the full Canvas description)
+    about: str = ""         # first useful sentence of the description
 
 
 @dataclass
@@ -39,3 +41,4 @@ class Mail:
     note: str = ""
     ignored: bool = False
     link: str = ""
+    balance: Optional[str] = None   # statement balance, when a bill states it

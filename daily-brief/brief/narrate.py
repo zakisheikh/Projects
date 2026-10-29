@@ -48,6 +48,7 @@ class Item:
     due: str = ""
     who: str = ""
     link: str = ""
+    detail: str = ""        # a second line of context (description snippet, statement balance, email preview)
     flags: list = field(default_factory=list)   # e.g. ["autopay off", "partner:Narjis", "overlap", "urgent"]
 
 
@@ -59,6 +60,16 @@ class Block:
     text: str = ""                              # a plain sentence instead of / in addition to the list
     notes: list = field(default_factory=list)   # extra sentences under the list (overlap warnings, quips)
     in_priority: bool = False                   # followup: already shown inside the priority list
+
+
+def preview(snippet, subject, limit=140):
+    """The email's opening words, minus the subject if it simply repeats it."""
+    text = re.sub(r"\s+", " ", (snippet or "").replace("\u034f", "").replace("\u200c", "")).strip(" \u00a0")
+    if text.lower().startswith(subject.lower()[:30]):
+        text = text[len(subject):].strip(" :-–")
+    if len(text) <= limit:
+        return text
+    return text[:limit].rsplit(" ", 1)[0].rstrip(",;:") + "…"
 
 
 def to_paragraphs(blocks):
@@ -180,13 +191,14 @@ class Narrator:
             if any(i.who == who for i in bill_items):
                 continue
             flags = (["autopay off"] if m.note == "autopay OFF" else []) + (["urgent"] if m in b.dues_urgent else [])
-            bill_items.append(Item(text=who, kind="bill", who=who, amount=m.amount or "", day=m.due,
+            bill_items.append(Item(text=who, kind="bill", who=who, amount=m.amount or "", day=m.due, link=m.link,
+                                   detail=(f"Statement balance {m.balance}" if m.balance and m.balance != m.amount else ""),
                                    due=(("overdue since " if m.due and m.due < self.today else "due ") + when(m.due, self.today)) if m.due else "",
                                    flags=flags))
 
         # urgent: things with a deadline soon, alerts, broken accounts
         urgent = [Item(f"Account problem, {f.split(':')[0]}: {f.split(':', 1)[-1].strip()[:80]}", "account", who=f.split(':')[0]) for f in b.failures]
-        urgent += [Item(render.hw_line(e, self.aliases), "notice", title=re.sub(r"\s*\((classic|new)\)\s*$", "", e.title.strip(), flags=re.I), label=e.start.strftime("%a %-m/%-d"), day=e.start.date(),
+        urgent += [Item(render.hw_line(e, self.aliases), "notice", link=e.link, detail=e.about, title=re.sub(r"\s*\((classic|new)\)\s*$", "", e.title.strip(), flags=re.I), label=e.start.strftime("%a %-m/%-d"), day=e.start.date(),
                         course=render.course_name(e.course, self.aliases) if e.course else "", hint=e.hint, flags=["urgent"]) for e in b.notice_urgent]
         if follow and b.dues_urgent:
             urgent.append(Item(follow, "followup"))
@@ -203,7 +215,8 @@ class Narrator:
 
         # the schedule window this brief is responsible for
         if b.today:
-            items = [Item(self.event_text(e), "event", title=e.title.strip() + self.span_note(e), label="all day" if e.all_day else e.start.strftime("%-I:%M %p").lstrip("0"),
+            items = [Item(self.event_text(e), "event", title=e.title.strip() + self.span_note(e), link=e.link,
+                          label="All day" if e.all_day else e.start.strftime("%-I:%M %p"), detail="" if e.all_day else "until " + e.end.strftime("%-I:%M %p"),
                           flags=([f"partner:{self.partner_label}"] if self.is_partner(e) else []) +
                                 (["overlap"] if any(e in pair for pair in b.overlaps) else []))
                      for e in b.today[: self.caps["events"]]]
@@ -223,7 +236,7 @@ class Narrator:
         def hw_item(e, kind):
             return Item(render.hw_line(e, self.aliases), kind, title=re.sub(r"\s*\((classic|new)\)\s*$", "", e.title.strip(), flags=re.I),
                         label=e.start.strftime("%a %-m/%-d"), day=e.start.date(),
-                        course=render.course_name(e.course, self.aliases) if e.course else "", hint=e.hint)
+                        course=render.course_name(e.course, self.aliases) if e.course else "", hint=e.hint, link=e.link, detail=e.about)
         if b.hw_week:
             items = [hw_item(e, "hw") for e in sorted(b.hw_week, key=lambda e: e.start)]
             blocks.append(Block("homework", v.say("homework_week"), self.capped_items(items, "week")))
@@ -242,7 +255,8 @@ class Narrator:
             blocks.append(Block("see_email", text=v.say("see_email")))
         else:
             def mail_items(ms, kind="mail"):
-                return [Item(self.mail_line(m), kind, title=m.subject, who=m.biller or render.sender_name(m), link=m.link) for m in ms]
+                return [Item(self.mail_line(m), kind, title=m.subject, who=m.biller or render.sender_name(m), link=m.link,
+                             detail=preview(m.snippet, m.subject)) for m in ms]
             for key, bank, items in (
                     ("paid", "paid_open", [Item(f"{m.biller or render.sender_name(m)}{' · ' + m.amount if m.amount else ''}", "paid",
                                                 who=m.biller or render.sender_name(m), amount=m.amount or "", link=m.link) for m in b.paid]),

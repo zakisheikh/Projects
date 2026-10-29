@@ -132,3 +132,11 @@ def extract_deadline(text, ref: date):
             out = out.replace(year=out.year + 1)
         return out
     return None
+
+
+BALANCE = re.compile(r"(?i)statement balance[^$]{0,60}\$\s?([\d,]+\.\d{2})")
+
+
+def extract_balance(text):
+    m = BALANCE.search(text)
+    return f"${_num(m.group(1)):,.2f}" if m else None

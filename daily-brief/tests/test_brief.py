@@ -274,6 +274,9 @@ class Tests(unittest.TestCase):
         self.assertNotIn("http://", html.replace("https://mail.google.com", ""))   # no remote resources
         self.assertNotIn("<img", html)                                       # nothing to block or track
         self.assertIn("https://mail.google.com/mail/", html)                 # mail rows link to the message
+        self.assertIn(">Gmail</a>", html)                                    # quick-link buttons
+        self.assertIn("max-width: 640px", html)                              # phone layout
+        self.assertIn("Please vote by", html)                                # description snippet under coursework
 
     def test_mail_depth_choices(self):
         email = self.run_text(FakeGoogle(MAIN))
@@ -317,6 +320,15 @@ class Tests(unittest.TestCase):
             def events(self, cid, start, end):
                 return [{"summary": "Recycling Trash Night", "start": {"dateTime": "2026-10-29T20:00:00-07:00"}, "end": {"dateTime": "2026-10-29T21:00:00-07:00"}}] if cid == "primary" else []
         self.assertNotIn("Recycling", self.run_text(G(MAIN)))
+
+    def test_description_summary(self):
+        from brief.parse import summarize
+        desc = ("*****\nFinal Project Proposal Report\n*****\nPlease review the [Final Project GitHub repository] (https://github.com/x/y) "
+                "for the description.\nSubmit by [Friday, October 30 at 7:00 PM].")
+        out = summarize(desc, "Final Project: Proposal")
+        self.assertTrue(out.startswith("Please review the Final Project GitHub repository for the description."), out)
+        self.assertNotIn("[", out)
+        self.assertNotIn("https://", out)
 
     def test_paid_settles_due(self):
         paid = msg("c9", "noreplyalerts@chase.com", "We've received your Sample Visa payment", day=28)
