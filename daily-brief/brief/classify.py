@@ -12,6 +12,9 @@ REL = re.compile(r"(?i)\bdue (today|tomorrow)\b(?:,?\s+([a-z]{3,9})\.?\s+(\d{1,2
 AUTOPAY = re.compile(r"(?i)\bnon[- ]?auto ?pay\b|\bauto-?\s?pay(?:ment)?s?\s*[:\-|]?\s*(on|off)\b")
 
 
+SENDER_ONLY = {"school", "people"}   # for these, who it is from is enough
+
+
 def compile_rules(cfg):
     """Generic keyword categories (health, school, security, ...). Returns (rules, n_sender)."""
     rules, n_sender = {}, {}
@@ -23,13 +26,13 @@ def compile_rules(cfg):
 
 def categorize(mail, rules, n_sender):
     """Text patterns on subject/snippet decide. A sender match alone (bank promos)
-    is not enough, except for school senders where any mail is relevant."""
+    is not enough, except for school and people, where any mail from them is relevant."""
     cats = []
     for name, pats in rules.items():
         k = n_sender[name]
         s_hit = any(p.search(mail.sender) for p in pats[:k])
         t_hit = any(p.search(f"{mail.subject} {mail.snippet}") for p in pats[k:])
-        if t_hit or (s_hit and name == "school"):
+        if t_hit or (s_hit and name in SENDER_ONLY):
             cats.append(name)
     if "receipt" in cats:
         cats = [c for c in cats if c != "bill"]

@@ -14,7 +14,7 @@ from .google import Google
 from .parse import parse_event, parse_mail
 
 ROOT = Path(__file__).resolve().parent.parent
-ALERT_WORDS = re.compile(r"(?i)fraud|unusual|suspicious|declin|failed|past due|overdue|final notice|denied")
+ALERT_WORDS = re.compile(r"(?i)fraud|unusual|suspicious|declin|failed|past due|overdue|final notice|denied|large (purchase|transaction)|low balance|overdraft")
 
 
 def load_config(path=None):
@@ -45,6 +45,7 @@ def collect_events(g, cfg, tz, start, end):
     compact = set(cal_cfg.get("compact_calendars", []))
     tag_hw = cal_cfg.get("course_tag_is_homework", True)
     drop_re = re.compile(cal_cfg.get("homework_exclude_pattern", r"(?!x)x"))
+    skip_re = re.compile(cal_cfg.get("exclude_event_pattern", r"(?!x)x"))
     exam_re = re.compile(cal_cfg.get("exam_pattern", r"(?!x)x"))
     out = []
     for cal in g.calendars():
@@ -53,6 +54,8 @@ def collect_events(g, cfg, tz, start, end):
             continue
         for raw in g.events(cal["id"], start, end):
             if raw.get("status") == "cancelled":
+                continue
+            if skip_re.search(raw.get("summary", "")):
                 continue
             e = parse_event(raw, name, tz, hw, name in hw_cals, name in compact, tag_hw)
             if e.homework and drop_re.search(e.title):
@@ -124,6 +127,7 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, trace=None):
     today = now.date()
     tomorrow = today + timedelta(days=1)
     horizon = today + timedelta(days=cfg["calendar"]["lookahead_days"])
+    exam_horizon = today + timedelta(days=cfg["calendar"].get("exam_lookahead_days", cfg["calendar"]["lookahead_days"]))
     soon = today + timedelta(days=cfg["bills"]["due_soon_days"])
     end = today + timedelta(days=cfg["bills"].get("window_days", 14))
 
@@ -156,6 +160,9 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, trace=None):
         if not on(e, today):
             return False
         if e.all_day:
+            span = (e.end.date() - e.start.date()).days
+            if span > 1 and today not in (e.start.date(), e.end.date() - timedelta(days=1)):
+                return False             # a multi-day item is mentioned on its first and last day only
             return first_slot            # all-day items are announced once, in the first brief
         return e.end > now and (window_end is None or e.start < window_end)
 
@@ -163,7 +170,9 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, trace=None):
     b.today = [e for e in uniq if in_window(e) and not e.homework]
     timed = sorted((e for e in b.today if not e.all_day), key=lambda e: e.start)
     b.overlaps = [(x, y) for i, x in enumerate(timed) for y in timed[i + 1:] if y.start < x.end]
-    work = [e for e in uniq if e.homework and today <= e.start.date() <= horizon]
+    if not later:     # the last brief of the day also looks at tomorrow's first event
+        b.early = [e for e in uniq if on(e, tomorrow) and not e.all_day and not e.homework and e.start.date() == tomorrow and e.start.hour < 8][:1]
+    work = [e for e in uniq if e.homework and today <= e.start.date() <= (exam_horizon if e.exam else horizon)]
     notices = [e for e in work if is_notice(e)]
     assignments = [e for e in work if not is_notice(e)]
     b.exams = [e for e in assignments if e.exam]
@@ -209,8 +218,7 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, trace=None):
     for m in candidates:
         if m not in open_cands:
             route[(m.account, m.id)] = "settled by a later payment notice"
-    b.bills = [m for m in open_cands if m.due and m.due <= end]
-    b.statements = [m for m in open_cands if not m.due]
+    b.bills = [m for m in open_cands if m.due and m.due <= end]   # statements with no due date are not mentioned
     for m in open_cands:
         if m.due and m.due > end:
             route[(m.account, m.id)] = "hidden until closer to its due date"
@@ -221,6 +229,9 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, trace=None):
     acts = take(lambda m: "action" in m.categories, "Action needed")
     b.action_urgent = [m for m in acts if m.due and m.due <= soon]
     b.action = [m for m in acts if m not in b.action_urgent]
+    b.school = take(lambda m: "school" in m.categories, "School mail")
+    b.invites = take(lambda m: "invite" in m.categories, "Invitations")
+    b.people = take(lambda m: "people" in m.categories, "From people")
     b.other = take(lambda m: "receipt" not in m.categories and m.event not in ("receipt", "balance"), "Other mail")
 
     if trace is not None:
@@ -282,7 +293,8 @@ def run(argv=None, google=None, now=None):
     if prev and now - timedelta(days=3) <= prev <= now:
         since = prev                      # catch up on anything missed since the last brief
     seen = st.get("seen", {})
-    day_end = datetime.combine(now.date() + timedelta(days=cfg["calendar"]["lookahead_days"] + 1), time.min, tz)
+    reach = max(cfg["calendar"]["lookahead_days"], cfg["calendar"].get("exam_lookahead_days", 0))
+    day_end = datetime.combine(now.date() + timedelta(days=reach + 1), time.min, tz)
 
     events, mails, open_bills, failures = [], [], [], []
     for name, g, err in accounts:

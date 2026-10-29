@@ -49,6 +49,16 @@ MAIN = [
     msg("m1", "Fidelity.Investments.email@shareholderdocs.fidelity.com", "Vote now! MICROSOFT Annual Meeting"),
     msg("m2", "return@amazon.com", "Return request confirmed for 2Pcs Disposable Oil Splash Guard"),
     msg("h3", "reservations@emails.hertz.com", "Zaki, thanks for booking!"),
+    msg("h4", "mychart@sdhealth.org", "Your lab results are available"),
+    msg("i1", "syed@alkisafoundation.org", "Invitation from an unknown sender: Quick Sync @ Tue Oct 27, 2026"),
+    msg("d1", "drive-shares-dm-noreply@google.com", 'Spreadsheet shared with you: "Zaki Workout Plan"'),
+    msg("s2", "customerservice@servicing.synchrony.com", "You Scheduled a Payment."),
+    msg("u2", "notifications@united.com", "What to know about your trip to San Diego"),
+    msg("hz2", "hertznoreply@rentals.hertz.com", "Hertz Rental Agreement"),
+    msg("st1", "fairwinds@member.fairwinds.org", "Your FAIRWINDS Credit Card statement is ready."),
+    msg("fr", "Mom <mom@gmail.com>", "dinner sunday?"),
+    msg("sub", "billing@streamco.com", "Your subscription renews on November 5"),
+    msg("px", "billing@streamco.com", "Notice: price increase for your plan"),
 ]
 OTHER = [msg("o1", "camp@gmail.com", "Reminder: 2026 Invoice - PAYMENT IS NOW OVERDUE", body="Total Registration Cost: $460")]
 
@@ -111,6 +121,13 @@ class FakeGoogle:
         FakeGoogle.sent = (to, subject, text, html)
 
 
+def Narr(bundle, slot, now):
+    from brief.narrate import Narrator
+    from brief.voice import Voice
+    v = Voice.load("Bruno", "Zaki", "t", {})
+    return "\n".join(Narrator(v, {}, now.date()).paragraphs(bundle, slot, now))
+
+
 def brief(google, config=None):
     FakeGoogle.sent = None
     run(["--force", "--dry-run"] + (["--config", config] if config else []), google=google, now=NOW)
@@ -166,11 +183,12 @@ class Tests(unittest.TestCase):
     def test_full_email_version(self):
         text = self.run_text(FakeGoogle(MAIN))
         for must in ("3:00pm · Dentist", "(ML)", "7:00 PM", "Databases", "Quick Poll", "$40.00", "autopay",
-                     "Unusual activity on your card", "$144.18", "Verizon", "$290.01", "Explanation of Benefits",
+                     "Unusual activity on your card", "$144.18", "Verizon", "$290.01", "lab results",
                      "lunch?", "Rent", "United", "Hertz", "spotify.com", "Essex"):
             self.assertIn(must, text, must)
         for mustnt in ("Standup", "Full moon", "Fajr", "Zuhr", "Tri valley", "reward you", "missing out", "Get reimbursed", "$2,900.26",
-                       "$3,628.15", "Fidelity", "Amazon", "Enrollment", "receipts"):
+                       "$3,628.15", "Fidelity", "Amazon", "Enrollment", "receipts", "Explanation of Benefits",
+                       "Scheduled a Payment", "What to know about your trip", "Rental Agreement", "FAIRWINDS", "Zaki Workout Plan"):
             self.assertNotIn(mustnt, text, mustnt)
         self.assertEqual(text.count("Final Project: Proposal"), 1)       # Canvas copy in two calendars -> once
         for heading in ("PRIORITY ITEMS", "REMAINING SCHEDULE", "NEEDS ATTENTION", "HEALTH & MEDICAL"):
@@ -181,7 +199,7 @@ class Tests(unittest.TestCase):
         tg = out.split("--- telegram preview ---")[1].strip()
         self.assertLess(len(tg), 1400)
         self.assertLessEqual(len(tg.split("\n\n")), 8)
-        for hidden in ("Aetna", "Explanation", "United", "Hertz", "lunch?", "spotify.com", "Verizon"):
+        for hidden in ("lab results", "United", "Hertz", "lunch?", "spotify.com", "Verizon", "Mom", "renews"):
             self.assertNotIn(hidden, tg)
         self.assertIn("email", tg.lower())               # points to the full version
 
@@ -217,8 +235,7 @@ class Tests(unittest.TestCase):
         email, tg = out.split("--- telegram preview ---")
         self.assertNotIn("Synchrony", out)                    # due in 7 weeks: not mentioned yet
         self.assertIn("Chase", tg)                            # due in 3 days: mentioned
-        self.assertIn("Fairwinds", email)                     # statement with no due date: email only
-        self.assertNotIn("Fairwinds", tg)
+        self.assertNotIn("Fairwinds", out)                    # "statement ready" notices were switched off
 
     def test_calendar_choices(self):
         out = self.run_out(FakeGoogle(MAIN))
@@ -255,6 +272,49 @@ class Tests(unittest.TestCase):
         self.assertNotIn("http://", html.replace("https://mail.google.com", ""))   # no remote resources
         self.assertNotIn("<img", html)                                       # nothing to block or track
         self.assertIn("https://mail.google.com/mail/", html)                 # mail rows link to the message
+
+    def test_mail_depth_choices(self):
+        email = self.run_text(FakeGoogle(MAIN))
+        self.assertIn("Mom: dinner sunday?", email)                       # people
+        self.assertIn("Prof: Reminder", email)                            # school sender
+        self.assertIn("Invitation from an unknown sender", email)         # invites
+        self.assertIn("streamco.com: Your subscription renews", email)    # subscriptions
+        self.assertIn("price increase", email)
+        self.assertIn("United: eTicket Itinerary", email)                 # itineraries stay
+        self.assertIn("Hertz: Zaki, thanks for booking!", email)          # bookings stay
+        self.assertIn("lab results", email)                               # medical results stay
+
+    def test_calendar_depth_choices(self):
+        import brief.main as bm
+        from brief.models import Event
+        cfg = bm.load_config()
+        PT_ = TZ
+        D = lambda y, m, d, h=0, mi=0: datetime(y, m, d, h, mi, tzinfo=PT_)
+        trip = Event("Trip", D(2026, 10, 27), D(2026, 10, 31), True, "Main")                      # Oct 27-30 inclusive
+        early = Event("Dentist", D(2026, 10, 30, 6, 30), D(2026, 10, 30, 7, 30), False, "Main")
+        trash = Event("Recycling Trash Night", D(2026, 10, 29, 20), D(2026, 10, 29, 21), False, "Main")
+        exam = Event("Final Exam [CS549-09-Fall2026]", D(2026, 11, 20), D(2026, 11, 21), True, "Canvas", homework=True, exam=True)
+        far_hw = Event("Essay 9 [CS549-09-Fall2026]", D(2026, 11, 13), D(2026, 11, 14), True, "Canvas", homework=True)
+        for day, shows in ((27, True), (28, False), (29, False), (30, True)):
+            now = D(2026, 10, day, 7, 17)
+            b = bm.assemble([trip], [], [], [], now, 7, cfg)
+            self.assertEqual(bool(b.today), shows, day)                                          # first and last day only
+        b = bm.assemble([trip], [], [], [], D(2026, 10, 30, 7, 17), 7, cfg)
+        self.assertIn("ends today", Narr(b, 7, D(2026, 10, 30, 7, 17)))
+        b = bm.assemble([early, trash], [], [], [], D(2026, 10, 29, 12, 17), 12, cfg)
+        self.assertEqual([e.title for e in b.early], ["Dentist"])                               # early-start warning at midday
+        self.assertIn("6:30 AM", Narr(b, 12, D(2026, 10, 29, 12, 17)))
+        b = bm.assemble([early], [], [], [], D(2026, 10, 29, 7, 17), 7, cfg)
+        self.assertEqual(b.early, [])                                                            # only the last brief looks at tomorrow
+        b = bm.assemble([exam, far_hw], [], [], [], D(2026, 10, 29, 7, 17), 7, cfg)
+        self.assertEqual([e.title for e in b.exams], [e.title for e in [exam]])                  # exams: 30 days
+        self.assertEqual(b.hw_week, [])                                                          # ordinary coursework: 7 days
+
+    def test_trash_night_is_skipped_at_the_source(self):
+        class G(FakeGoogle):
+            def events(self, cid, start, end):
+                return [{"summary": "Recycling Trash Night", "start": {"dateTime": "2026-10-29T20:00:00-07:00"}, "end": {"dateTime": "2026-10-29T21:00:00-07:00"}}] if cid == "primary" else []
+        self.assertNotIn("Recycling", self.run_text(G(MAIN)))
 
     def test_paid_settles_due(self):
         paid = msg("c9", "noreplyalerts@chase.com", "We've received your Sample Visa payment", day=28)
@@ -327,8 +387,8 @@ class Tests(unittest.TestCase):
             FakeGoogle.sent = None
             self.assertEqual(run(["--force", "--state", path], google=g, now=NOW), 0)
             self.assertTrue(sent and FakeGoogle.sent)
-            self.assertNotIn("Aetna", sent[0])                          # health stays off Telegram
-            self.assertIn("Aetna", FakeGoogle.sent[2])                  # but present in the email
+            self.assertNotIn("lab results", sent[0])                    # health stays off Telegram
+            self.assertIn("lab results", FakeGoogle.sent[2])            # but present in the email
             with open(path) as f:
                 st = json.load(f)
             self.assertIn("last_sent", st)

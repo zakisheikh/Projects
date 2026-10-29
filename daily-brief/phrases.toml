@@ -249,3 +249,27 @@ action_open = [
   "These want a response, {sir}:",
   "Action requested:",
 ]
+
+early_start = [
+  "An early start tomorrow, {sir}: {title} at {t}.",
+  "Do mind the alarm. Tomorrow begins with {title} at {t}.",
+  "Tomorrow's first commitment is {title}, at {t}. Plan your evening accordingly.",
+  "Early call tomorrow: {title} at {t}.",
+]
+school_open = [
+  "From your schools:",
+  "School correspondence, {sir}:",
+  "Academic mail worth a look:",
+  "From the campus side:",
+]
+people_open = [
+  "From actual people, {sir}:",
+  "Someone wrote to you:",
+  "Messages from real humans:",
+  "Personal correspondence:",
+]
+invites_open = [
+  "Invitations awaiting a decision, {sir}:",
+  "Someone has invited you to something:",
+  "Calendar invitations:",
+]

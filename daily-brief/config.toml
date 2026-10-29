@@ -32,7 +32,9 @@ token_env = "GOOGLE_REFRESH_TOKEN_2"
 exclude_calendars = ["Holidays in United States", "Birthdays", "Phases of the Moon", "Prayer Times", "Muslim Holidays", "Zaheer Calendar", "Family"]
 partner_emails = ["narjisirfan@gmail.com"]   # events created by these people are tagged with partner_label
 partner_label = "Narjis"
-lookahead_days = 7
+exclude_event_pattern = '(?i)recycling|trash night'   # events you chose not to hear about
+lookahead_days = 7        # coursework horizon
+exam_lookahead_days = 30  # exams, quizzes and presentations are announced this far ahead
 # Calendars whose every event is an assignment (e.g. the subscribed Canvas feed). Fill in the calendar's name.
 # Canvas feeds import as all-day events titled "<assignment> [<COURSE>]"; the date is the due date.
 homework_calendars = ["Zaki Sheikh Calendar (Canvas)"]
@@ -76,10 +78,10 @@ kind = "card"
 from = '(?i)no\.?reply\.?alerts@chase\.com'
 rules = [
   { subject = '(?i)payment is due', event = "due" },
-  { subject = '(?i)statement is available', event = "statement" },
-  { subject = '(?i)(received|posted|scheduled) your .*payment|payment (was )?(received|posted|scheduled)', event = "paid" },
+  { subject = '(?i)statement is available', event = "ignore" },
+  { subject = '(?i)(received|posted) your .*payment|payment (was )?(received|posted)', event = "paid" },
   { subject = '(?i)balance is \$', event = "ignore" },
-  { subject = '(?i)fraud|unusual|suspicious|declin|security|locked', event = "alert" },
+  { subject = '(?i)fraud|unusual|suspicious|declin|security|locked|large (purchase|transaction)|low balance|overdraft', event = "alert" },
   { subject = '(?i)credit limit|offer|reward', event = "ignore" },
   { subject = '(?i)new letter', event = "info" },
 ]
@@ -95,8 +97,8 @@ kind = "card"
 from = '(?i)synchrony(bank)?\.com'
 rules = [
   { subject = '(?i)payment is due|payment due', event = "due" },
-  { subject = '(?i)statement is ready', event = "statement" },
-  { subject = '(?i)scheduled a payment|payment (received|posted)|thank', event = "paid" },
+  { subject = '(?i)statement is ready', event = "ignore" },
+  { subject = '(?i)payment (received|posted)|thank', event = "paid" },
   { subject = '.', event = "ignore" },
 ]
 [[billers]]
@@ -105,7 +107,7 @@ kind = "card"
 from = '(?i)fairwinds\.org'
 rules = [
   { subject = '(?i)payment.*due|due', event = "due" },
-  { subject = '(?i)statement', event = "statement" },
+  { subject = '(?i)statement', event = "ignore" },
 ]
 [[billers]]
 name = "Bank of America"
@@ -113,8 +115,8 @@ kind = "card"
 from = '(?i)bankofamerica\.com'
 rules = [
   { subject = '(?i)payment.*due', event = "due" },
-  { subject = '(?i)statement is available', event = "statement" },
-  { subject = '(?i)fraud|declin|alert|unusual', event = "alert" },
+  { subject = '(?i)statement is available', event = "ignore" },
+  { subject = '(?i)fraud|declin|alert|unusual|large (purchase|transaction)|low balance|overdraft', event = "alert" },
 ]
 [[billers]]
 name = "Patelco"
@@ -122,7 +124,8 @@ kind = "bank"
 from = '(?i)patelco\.org|services\.pscu\.com'
 rules = [
   { subject = '(?i)balance summary', event = "ignore" },
-  { subject = '(?i)fraud|declin|unusual|overdraft|low balance', event = "alert" },
+  { subject = '(?i)thank.*payment|payment (received|posted)', event = "paid" },
+  { subject = '(?i)fraud|declin|unusual|overdraft|low balance|large (purchase|transaction)', event = "alert" },
 ]
 [[billers]]
 name = "Verizon"
@@ -154,14 +157,14 @@ kind = "insurance"
 from = '(?i)mercuryinsurance\.com'
 rules = [
   { subject = '(?i)new .*insurance bill', event = "due" },
-  { subject = '(?i)policy documents', event = "ignore" },
+  { subject = '(?i)policy documents|claim|renew|coverage', event = "admin" },
 ]
 [[billers]]
 name = "Aetna"
 kind = "health"
 from = '(?i)aetna\.com'
 rules = [
-  { subject = '(?i)explanation of benefits', event = "statement" },
+  { subject = '(?i)explanation of benefits', event = "ignore" },
   { subject = '.', event = "ignore" },
 ]
 [[billers]]
@@ -204,28 +207,47 @@ rules = [{ subject = '.', event = "ignore" }]
 name = "United"
 kind = "travel"
 from = '(?i)united\.com'
-rules = [{ subject = '.', event = "travel" }]
+rules = [
+  { subject = '(?i)itinerary|confirmation|booking|reservation', event = "travel" },
+  { subject = '.', event = "ignore" },
+]
 [[billers]]
 name = "Hertz"
 kind = "travel"
 from = '(?i)hertz\.com'
-rules = [{ subject = '.', event = "travel" }]
+rules = [
+  { subject = '(?i)thanks for booking|reservation|booking', event = "travel" },
+  { subject = '.', event = "ignore" },
+]
 [[billers]]
 name = "Booking.com"
 kind = "travel"
 from = '(?i)booking\.com'
-rules = [{ subject = '.', event = "travel" }]
+rules = [
+  { subject = '(?i)confirm|booking|reservation', event = "travel" },
+  { subject = '.', event = "ignore" },
+]
+[[billers]]
+name = "Drive and docs notifications (muted)"
+kind = "marketing"
+from = '(?i)drive-shares|comments-noreply|docs\.google\.com'
+rules = [{ subject = '.', event = "ignore" }]
+[[billers]]
+name = "Student accounts"
+kind = "school"
+from = '(?i)\.edu\b'
+rules = [{ subject = '(?i)tuition|student account|fee|payment due|balance due|\bbill\b', event = "due" }]
 
 # ---------------------------------------------------------------------------
 # Generic keyword rules: catch mail from senders not listed above. Subject/snippet only.
 # ---------------------------------------------------------------------------
 [mail.rules.health]
 sender = []
-text   = ['(?i)explanation of benefits', '(?i)patient (balance|statement)', '(?i)medical (bill|statement)', '(?i)claim (processed|denied)', '(?i)\bcopay\b',
+text   = ['(?i)patient (balance|statement)', '(?i)medical (bill|statement)', '(?i)claim (processed|denied)', '(?i)\bcopay\b',
           '(?i)lab results?', '(?i)test results?', '(?i)appointment (reminder|confirmed|scheduled)', '(?i)visit summary', '(?i)\bmychart\b']
 [mail.rules.card]
 sender = []
-text   = ['(?i)statement (is )?(ready|available)', '(?i)minimum payment', '(?i)(fraud|unusual|suspicious) (activity|alert|transaction)', '(?i)\bautopay\b']
+text   = ['(?i)minimum payment', '(?i)(fraud|unusual|suspicious) (activity|alert|transaction)', '(?i)\bautopay\b', '(?i)large (purchase|transaction)', '(?i)low balance|overdraft']
 [mail.rules.bill]
 sender = []
 text   = ['(?i)\binvoice\b', '(?i)past due|overdue', '(?i)amount due', '(?i)bill is (ready|available)', '(?i)payment (reminder|failed|declined)', '(?i)final notice']
@@ -234,16 +256,27 @@ sender = []
 text   = ['(?i)\breceipt\b', '(?i)order confirmation']
 [mail.rules.logistics]
 sender = []
-text   = ['(?i)\bflight\b', '(?i)itinerary', '(?i)check-?in', '(?i)reservation', '(?i)boarding']
+text   = ['(?i)itinerary', '(?i)booking confirm', '(?i)reservation (confirmed|confirmation)']
 [mail.rules.renewal]
 sender = []
-text   = ['(?i)\brenews?\b', '(?i)renewal', '(?i)auto-?renew', '(?i)trial (ends|ending|expires)', '(?i)will be charged', '(?i)your subscription']
+text   = ['(?i)\brenews?\b', '(?i)renewal', '(?i)auto-?renew', '(?i)trial (ends|ending|expires)', '(?i)will be charged', '(?i)your subscription',
+          '(?i)price (increase|change)', '(?i)(changing|update to) (our )?pricing', '(?i)payment (update|method) required', '(?i)(subscription|membership) (payment )?(failed|declined)']
 [mail.rules.action]
 sender = []
 text   = ['(?i)action (needed|required)', '(?i)respond by', '(?i)please confirm', '(?i)verify your', '(?i)update your .* by']
 [mail.rules.government]
-sender = ['(?i)\.gov\b|\bdmv\b|\birs\b|courts?\.']
-text   = ['(?i)notice of', '(?i)summons', '(?i)jury', '(?i)\bIRS\b', '(?i)\bDMV\b', '(?i)court date']
+sender = ['(?i)\.gov\b|\bdmv\b|\birs\b']
+text   = ['(?i)\bIRS\b', '(?i)internal revenue', '(?i)franchise tax board|state tax', '(?i)\bDMV\b', '(?i)registration renewal|license renewal|real id', '(?i)summons', '(?i)jury', '(?i)court date']
 [mail.rules.community]
 sender = ['(?i)camphujjah|noorcollective|masjid|mosque']
 text   = ['(?i)\bzakat\b', '(?i)donation', '(?i)\bcamp\b.*(invoice|payment|balance)', '(?i)(mosque|masjid|foundation)']
+[mail.rules.school]
+sender = ['(?i)\.edu\b|instructure|canvas|gradescope|blackboard|schoology']
+text   = ['(?i)grade (posted|released)|new grade|\bgraded\b', '(?i)financial aid', '(?i)registrar|enrollment hold|registration (opens|window)', '(?i)tuition|student account|fee statement']
+[mail.rules.people]
+# individuals: personal mail domains and the foundation you volunteer with; automated senders are excluded
+sender = ['(?i)^(?!.*(no-?reply|do-?not-?reply|notification|mailer-daemon|support@|alerts?@|news|marketing)).*@(gmail|yahoo|icloud|me|outlook|hotmail|aol|proton)\.', '(?i)alkisafoundation\.org']
+text   = []
+[mail.rules.invite]
+sender = []
+text   = ['(?i)^(updated )?invitation( from an unknown sender)?:']

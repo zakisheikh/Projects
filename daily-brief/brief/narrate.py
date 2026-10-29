@@ -13,7 +13,6 @@ class Bundle:
     dues_urgent: list = field(default_factory=list)
     dues_later: list = field(default_factory=list)
     bills: list = field(default_factory=list)
-    statements: list = field(default_factory=list)   # new statements that state no due date
     alerts: list = field(default_factory=list)
     action_urgent: list = field(default_factory=list)
     today: list = field(default_factory=list)        # events for the window this brief covers
@@ -27,7 +26,11 @@ class Bundle:
     travel: list = field(default_factory=list)
     renewals: list = field(default_factory=list)
     action: list = field(default_factory=list)
+    school: list = field(default_factory=list)
+    invites: list = field(default_factory=list)
+    people: list = field(default_factory=list)
     other: list = field(default_factory=list)
+    early: list = field(default_factory=list)       # tomorrow's first event if it starts before 8am (last brief only)
     any_homework: bool = False
 
 
@@ -118,10 +121,15 @@ class Narrator:
             return items
         return items[:n] + [self.v.say("more_items", k=len(items) - n)]
 
+    def span_note(self, e):
+        if not e.all_day or (e.end.date() - e.start.date()).days <= 1:
+            return ""
+        return " (starts today)" if e.start.date() == self.today else " (ends today)"
+
     def event_text(self, e):
         stamp = "all day" if e.all_day else e.start.strftime("%-I:%M%p").lower()
         mine = f" ({self.partner_label})" if self.is_partner(e) else ""
-        return f"{stamp} · {e.title.strip()}{mine}"
+        return f"{stamp} · {e.title.strip()}{self.span_note(e)}{mine}"
 
     def mail_line(self, m):
         return f"{m.biller or render.sender_name(m)}: {m.subject[:70].strip()}"
@@ -195,7 +203,7 @@ class Narrator:
 
         # the schedule window this brief is responsible for
         if b.today:
-            items = [Item(self.event_text(e), "event", title=e.title.strip(), label="all day" if e.all_day else e.start.strftime("%-I:%M %p").lstrip("0"),
+            items = [Item(self.event_text(e), "event", title=e.title.strip() + self.span_note(e), label="all day" if e.all_day else e.start.strftime("%-I:%M %p").lstrip("0"),
                           flags=([f"partner:{self.partner_label}"] if self.is_partner(e) else []) +
                                 (["overlap"] if any(e in pair for pair in b.overlaps) else []))
                      for e in b.today[: self.caps["events"]]]
@@ -207,6 +215,9 @@ class Narrator:
             blocks.append(Block("schedule", v.say("schedule_morning_open" if slot < 12 else "schedule_open"), items, notes=notes))
         else:
             blocks.append(Block("schedule_empty", text=v.say("schedule_morning_empty" if slot < 12 else "schedule_empty")))
+
+        for ev in b.early:
+            blocks.append(Block("early", text=v.say("early_start", title=ev.title.strip(), t=ev.start.strftime("%-I:%M %p").lstrip("0"))))
 
         # coursework for the week, dated, soonest first (the same in both briefs)
         def hw_item(e, kind):
@@ -230,15 +241,15 @@ class Narrator:
         if self.compact:
             blocks.append(Block("see_email", text=v.say("see_email")))
         else:
-            if b.statements:
-                names = sorted({m.biller or render.sender_name(m) for m in b.statements})
-                blocks.append(Block("statements", text=v.say("statements_no_due", items=join_list(names)), items=[Item(n, "mail", who=n) for n in names]))
-
             def mail_items(ms, kind="mail"):
                 return [Item(self.mail_line(m), kind, title=m.subject, who=m.biller or render.sender_name(m), link=m.link) for m in ms]
             for key, bank, items in (
                     ("paid", "paid_open", [Item(f"{m.biller or render.sender_name(m)}{' · ' + m.amount if m.amount else ''}", "paid",
                                                 who=m.biller or render.sender_name(m), amount=m.amount or "", link=m.link) for m in b.paid]),
+                    ("people", "people_open", mail_items(b.people)),
+                    ("school", "school_open", mail_items(b.school)),
+                    ("invites", "invites_open", [Item(self.mail_line(m), "mail", title=m.subject, who=m.biller or render.sender_name(m), link=m.link,
+                                                      flags=["unknown sender"] if "unknown sender" in m.subject.lower() else []) for m in b.invites]),
                     ("health", "health_open", mail_items(b.health)),
                     ("admin", "admin_open", mail_items(b.admin)),
                     ("travel", "logistics_open", mail_items(b.travel)),
