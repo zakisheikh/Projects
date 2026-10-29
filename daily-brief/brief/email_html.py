@@ -1,38 +1,28 @@
-"""The designed HTML email. Table layout + inline styles for every client, a <style> block for dark mode.
-No images, no web fonts, no JavaScript: it renders the same in Gmail, Apple Mail and Outlook."""
-from datetime import timedelta
+"""The HTML email, designed in the Apple idiom: quiet grey page, inset grouped lists, system type,
+generous space, one accent colour. Table layout + inline styles for every client; dark mode via a <style> block.
+No images, no web fonts, no JavaScript."""
 from html import escape
 
-FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif"
-MONO = "SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace"
+FONT = "-apple-system,BlinkMacSystemFont,'SF Pro Text','SF Pro Display','Helvetica Neue',Helvetica,Arial,sans-serif"
 
-# light palette (dark overrides live in CSS below)
-INK, MUTED, HAIR, CARD, PAGE = "#1b1f2a", "#667085", "#e8e4da", "#ffffff", "#f3f0ea"
-NAVY, CYAN, RED, AMBER, GREEN, SLATE, VIOLET = "#0b1d3a", "#38bdf8", "#e5484d", "#f59e0b", "#12a77d", "#64748b", "#7c5cff"
+# light palette (dark overrides live in CSS below) -- after iOS system colours
+INK, GRAY, FAINT, HAIR, GROUP, PAGE = "#1d1d1f", "#6e6e73", "#a1a1a6", "#e5e5ea", "#ffffff", "#f5f5f7"
+BLUE, RED, ORANGE = "#0071e3", "#d70015", "#c93400"
 
-# each section: (eyebrow label, accent colour)
-SECTIONS = {
-    "priority": ("Priority", RED), "schedule": ("Schedule", CYAN), "homework": ("Coursework", VIOLET), "exams": ("Exams & presentations", RED),
-    "notices": ("Class notices", SLATE), "followup": ("Bills", AMBER), "paid": ("Paid", GREEN), "health": ("Health", GREEN),
-    "admin": ("Life admin", SLATE), "travel": ("Travel", CYAN), "renewals": ("Subscriptions", SLATE), "action": ("Action requested", AMBER),
-    "other": ("Worth opening", SLATE),
-}
-
-CSS = f"""
+CSS = """
 <style>
-  :root {{ color-scheme: light dark; supported-color-schemes: light dark; }}
-  body, table, td, p, a, li {{ -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; }}
-  a {{ color: inherit; }}
-  @media (max-width: 640px) {{
-    .wrap {{ width:100% !important; }} .pad {{ padding-left:18px !important; padding-right:18px !important; }}
-    .hero-title {{ font-size:26px !important; }} .stack {{ display:block !important; width:100% !important; }}
-  }}
-  @media (prefers-color-scheme: dark) {{
-    .page {{ background:#0a0e16 !important; }} .card {{ background:#121826 !important; border-color:#222c3f !important; }}
-    .ink {{ color:#eef1f6 !important; }} .muted {{ color:#9aa6b8 !important; }} .hair {{ border-color:#222c3f !important; }}
-    .tile {{ background:#1a2336 !important; }} .rowalt {{ background:#161e30 !important; }} .warnbg {{ background:#33270d !important; }}
-    .chip-slate {{ background:#1f2a40 !important; color:#c6d0e0 !important; }}
-  }}
+  :root { color-scheme: light dark; supported-color-schemes: light dark; }
+  body, table, td, p, a { -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; }
+  a { color:inherit; text-decoration:none; }
+  @media (max-width: 640px) {
+    .wrap { width:100% !important; } .pad { padding-left:16px !important; padding-right:16px !important; }
+    .big { font-size:34px !important; line-height:38px !important; }
+  }
+  @media (prefers-color-scheme: dark) {
+    .page { background:#000000 !important; } .group { background:#1c1c1e !important; }
+    .ink { color:#f5f5f7 !important; } .gray { color:#98989d !important; } .faint { color:#636366 !important; }
+    .hair { border-color:#38383a !important; } .red { color:#ff453a !important; } .orange { color:#ff9f0a !important; } .blue { color:#2997ff !important; }
+  }
 </style>
 """
 
@@ -41,108 +31,93 @@ def e(x):
     return escape(str(x), quote=True)
 
 
-def chip(text, bg, fg="#ffffff", cls=""):
-    return (f'<span class="{cls}" style="display:inline-block;padding:2px 9px;margin:0 6px 0 0;border-radius:999px;background:{bg};color:{fg};'
-            f'font:600 11px/18px {FONT};letter-spacing:.04em;text-transform:uppercase;white-space:nowrap">{e(text)}</span>')
+def gap(h=24):
+    return f'<tr><td style="height:{h}px;line-height:{h}px;font-size:0">&nbsp;</td></tr>'
 
 
-def soft_chip(text, color):
-    return chip(text, "#eef1f6", color, "chip-slate")
+def cell(inner, last=False, link=""):
+    border = "" if last else f"border-bottom:1px solid {HAIR};"
+    chevron = (f'<td width="14" valign="middle" class="faint" style="font:400 20px/20px {FONT};color:{FAINT};padding-left:8px">&rsaquo;</td>' if link else "")
+    body = (f'<a href="{e(link)}" style="display:block">{inner}</a>' if link else inner)
+    return (f'<tr><td class="hair" style="padding:0 0 0 16px;{border}"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>'
+            f'<td style="padding:12px 16px 12px 0">{body}</td>{chevron.replace("padding-left:8px", "padding:0 14px 0 0")}</tr></table></td></tr>')
 
 
-def tile(item, today):
-    """Calendar-style date tile: weekday over day number. Red when due soon."""
+def line(text, size=17, weight=400, cls="ink", color=INK, extra=""):
+    return f'<div class="{cls}" style="font:{weight} {size}px/{size + 6}px {FONT};color:{color};letter-spacing:-.01em;{extra}">{e(text)}</div>'
+
+
+def sub(text, cls="gray", color=GRAY):
+    return f'<div class="{cls}" style="font:400 13px/18px {FONT};color:{color};margin-top:1px">{text}</div>'
+
+
+def due_color(item, today):
     d = item.day
     if not d:
-        return ""
-    days = (d - today).days
-    bg, fg = (RED, "#fff") if days <= 1 else (AMBER, "#1b1f2a") if days <= 3 else ("#eef1f6", INK)
-    cls = "" if days <= 3 else "tile"
-    return (f'<table role="presentation" cellspacing="0" cellpadding="0" border="0" align="left" style="margin:0 14px 0 0"><tr>'
-            f'<td class="{cls}" align="center" width="52" style="width:52px;background:{bg};border-radius:10px;padding:6px 0;color:{fg};font-family:{FONT}">'
-            f'<div style="font:700 10px/12px {FONT};letter-spacing:.08em;text-transform:uppercase;opacity:.85">{e(d.strftime("%a"))}</div>'
-            f'<div style="font:800 20px/22px {FONT}">{d.day}</div></td></tr></table>')
+        return "gray", GRAY
+    return ("red", RED) if (d - today).days <= 1 else ("gray", GRAY)
 
 
-def row(inner, alt=False, last=False):
-    border = "" if last else f"border-bottom:1px solid {HAIR};"
-    return (f'<tr><td class="hair{" rowalt" if alt else ""}" style="padding:12px 0;{border}font-family:{FONT};font-size:15px;line-height:22px;color:{INK}">'
-            f'{inner}</td></tr>')
-
-
-def link(text, href, bold=False):
-    if not href:
-        return e(text)
-    return f'<a href="{e(href)}" style="color:inherit;text-decoration:none;border-bottom:1px dotted {SLATE}">{e(text)}</a>'
-
-
-def item_html(item, today):
+def item_cell(item, today, last):
     k = item.kind
     if k in ("hw", "exam", "notice"):
-        tag = ""
-        if k == "exam":
-            tag += chip("Exam", RED)
-        if item.course:
-            tag += soft_chip(item.course, VIOLET)
-        hint = f'<div class="muted" style="color:{RED};font-weight:600;font-size:13px">{e(item.hint)}</div>' if item.hint else ""
-        return (tile(item, today) + f'<div class="ink" style="font-weight:600;overflow:hidden">{e(item.title)}</div>'
-                f'<div style="margin-top:3px">{tag}</div>{hint}<div style="clear:both"></div>')
+        cls, col = due_color(item, today)
+        left = (f'<td width="92" valign="top" class="{cls}" style="width:92px;font:500 15px/22px {FONT};color:{col};padding-top:1px">{e(item.label)}</td>')
+        bits = [x for x in (("Exam" if k == "exam" else ""), item.course) if x]
+        tail = e(" · ".join(bits))
+        hint = (f'<span class="red" style="color:{RED}">{e(item.hint)}</span>' if item.hint else "")
+        meta = " · ".join(x for x in (tail, hint) if x)
+        inner = (f'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>{left}<td valign="top">'
+                 f'{line(item.title)}{sub(meta) if meta else ""}</td></tr></table>')
+        return cell(inner, last)
     if k == "event":
         partner = next((f.split(":", 1)[1] for f in item.flags if f.startswith("partner:")), "")
-        extra = (chip(partner, VIOLET) if partner else "") + (chip("Overlap", AMBER, INK) if "overlap" in item.flags else "")
-        return (f'<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"><tr>'
-                f'<td width="84" valign="top" style="width:84px;font:700 14px/22px {MONO};color:{CYAN}">{e(item.label)}</td>'
-                f'<td valign="top" class="ink" style="font-family:{FONT};font-size:15px;line-height:22px;color:{INK}">{e(item.title)}'
-                f'{" " + extra if extra else ""}</td></tr></table>')
+        notes = " · ".join(x for x in (partner, ("overlaps another event" if "overlap" in item.flags else "")) if x)
+        inner = (f'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>'
+                 f'<td width="92" valign="top" class="gray" style="width:92px;font:500 15px/22px {FONT};color:{GRAY};padding-top:1px;white-space:nowrap">{e(item.label)}</td>'
+                 f'<td valign="top">{line(item.title)}{sub(e(notes), "orange", ORANGE) if "overlap" in item.flags else (sub(e(notes)) if notes else "")}</td></tr></table>')
+        return cell(inner, last)
     if k == "bill":
         urgent = "urgent" in item.flags
-        right = f'<span class="ink" style="font:800 18px/22px {FONT};color:{INK}">{e(item.amount)}</span>' if item.amount else ""
-        tags = (chip(item.due, RED if urgent else SLATE) if item.due else "") + (chip("Autopay off", AMBER, INK) if "autopay off" in item.flags else "")
-        return (f'<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"><tr>'
-                f'<td valign="top" class="ink" style="font-family:{FONT};font-size:16px;line-height:24px;font-weight:700;color:{INK}">{e(item.who)}<div style="margin-top:3px">{tags}</div></td>'
-                f'<td valign="top" align="right">{right}</td></tr></table>')
-    if k in ("alert", "action", "account", "followup"):
-        label = {"alert": ("Alert", RED, "#fff"), "action": ("Action", AMBER, INK), "account": ("Account", RED, "#fff"), "followup": ("Bills", AMBER, INK)}[k]
-        due = f' <span class="muted" style="color:{MUTED}">· by {e(item.due)}</span>' if item.due else ""
-        body = link(item.text, item.link) if k not in ("followup",) else e(item.text)
-        return chip(*label) + f'<span class="ink">{body}</span>{due}'
+        cls, col = ("red", RED) if urgent else ("gray", GRAY)
+        due = f'<span class="{cls}" style="color:{col}">{e(item.due)}</span>' if item.due else ""
+        auto = f'<span class="orange" style="color:{ORANGE}">Autopay is off</span>' if "autopay off" in item.flags else ""
+        meta = " · ".join(x for x in (due, auto) if x)
+        amount = f'<div class="ink" style="font:600 17px/23px {FONT};color:{INK};text-align:right;white-space:nowrap">{e(item.amount)}</div>' if item.amount else ""
+        inner = (f'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td valign="top">{line(item.who)}{sub(meta) if meta else ""}</td>'
+                 f'<td valign="top" align="right">{amount}</td></tr></table>')
+        return cell(inner, last)
+    if k in ("alert", "action", "account"):
+        word, cls, col = {"alert": ("Alert", "red", RED), "action": ("Action needed", "orange", ORANGE), "account": ("Account problem", "red", RED)}[k]
+        by = f" · by {e(item.due)}" if item.due else ""
+        return cell(f'{line(item.title or item.text)}<div class="{cls}" style="font:500 13px/18px {FONT};color:{col};margin-top:1px">{e(word)} · {e(item.who)}{by}</div>',
+                    last, item.link)
     if k == "paid":
-        amt = f' <span style="font-weight:800">{e(item.amount)}</span>' if item.amount else ""
-        return chip("Paid", GREEN) + f'<span class="ink">{link(item.who, item.link)}</span>{amt}'
+        amount = f'<div class="ink" style="font:600 17px/23px {FONT};color:{INK};text-align:right">{e(item.amount)}</div>' if item.amount else ""
+        inner = (f'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td>{line(item.who)}{sub("Payment received")}</td>'
+                 f'<td align="right">{amount}</td></tr></table>')
+        return cell(inner, last, item.link)
     if k == "more":
-        return f'<span class="muted" style="color:{MUTED};font-style:italic">{e(item.text)}</span>'
-    # generic mail / info rows: sender in small caps, subject below
-    return (f'<div class="muted" style="font:700 11px/16px {FONT};letter-spacing:.06em;text-transform:uppercase;color:{MUTED}">{e(item.who)}</div>'
-            f'<div class="ink" style="font-weight:500">{link(item.title or item.text, item.link)}</div>')
+        return cell(f'<div class="gray" style="font:italic 400 15px/22px {FONT};color:{GRAY}">{e(item.text)}</div>', last)
+    caution = "Unknown sender" if "unknown sender" in item.flags else ""
+    meta = e(item.who) + (f' · <span class="orange" style="color:{ORANGE}">{caution}</span>' if caution else "")
+    return cell(f'{line(item.title or item.text, 16, 400)}{sub(meta)}', last, item.link)
 
 
-def section(block, today, first=False):
-    label, accent = SECTIONS.get(block.key, (block.key.title(), SLATE))
+def group(block, today):
     items = [i for i in block.items if not (block.key == "priority" and i.kind == "followup")]
     if not items and not block.notes:
         return ""
-    body = "".join(row(item_html(i, today), last=(n == len(items) - 1)) for n, i in enumerate(items))
-    notes = "".join(
-        f'<tr><td class="warnbg" style="padding:10px 12px;margin-top:8px;background:#fff6e0;border-left:3px solid {AMBER};border-radius:6px;'
-        f'font:500 14px/21px {FONT};color:{INK}">{e(n)}</td></tr><tr><td style="height:6px;line-height:6px;font-size:0">&nbsp;</td></tr>'
-        for n in block.notes)
-    return (f'<tr><td class="card pad" style="background:{CARD};border:1px solid {HAIR};border-top:4px solid {accent};border-radius:14px;padding:20px 26px 10px">'
-            f'<div style="font:700 11px/14px {FONT};letter-spacing:.14em;text-transform:uppercase;color:{accent}">{e(label)}</div>'
-            f'<div class="ink" style="font:600 18px/26px {FONT};color:{INK};margin:4px 0 8px">{e(block.lead)}</div>'
-            f'<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">{body}</table>'
-            f'<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-top:6px">{notes}</table></td></tr>'
-            f'<tr><td style="height:16px;line-height:16px;font-size:0">&nbsp;</td></tr>')
+    rows = "".join(item_cell(i, today, n == len(items) - 1 and not block.notes) for n, i in enumerate(items))
+    for n, text in enumerate(block.notes):
+        rows += cell(f'<div class="orange" style="font:400 15px/22px {FONT};color:{ORANGE}">{e(text)}</div>', n == len(block.notes) - 1)
+    return (f'<tr><td class="pad" style="padding:0 20px 6px"><div class="gray" style="font:400 13px/18px {FONT};color:{GRAY};text-transform:uppercase;letter-spacing:.04em">{e(block.lead.rstrip(":"))}</div></td></tr>'
+            f'<tr><td class="pad" style="padding:0 20px"><table role="presentation" class="group" width="100%" cellspacing="0" cellpadding="0" border="0" '
+            f'style="background:{GROUP};border-radius:12px;overflow:hidden">{rows}</table></td></tr>{gap(28)}')
 
 
-def sentence_card(text, accent=GREEN):
-    return (f'<tr><td class="card pad" style="background:{CARD};border:1px solid {HAIR};border-left:4px solid {accent};border-radius:14px;padding:16px 26px">'
-            f'<div class="ink" style="font:500 16px/24px {FONT};color:{INK}">{e(text)}</div></td></tr>'
-            f'<tr><td style="height:16px;line-height:16px;font-size:0">&nbsp;</td></tr>')
-
-
-def stat(n, label, color):
-    return (f'<td align="center" style="padding:0 6px"><div style="font:800 26px/28px {FONT};color:{color}">{n}</div>'
-            f'<div style="font:600 10px/14px {FONT};letter-spacing:.1em;text-transform:uppercase;color:#9fb2d0">{e(label)}</div></td>')
+def sentence(text):
+    return (f'<tr><td class="pad" style="padding:0 20px"><div class="gray" style="font:400 17px/25px {FONT};color:{GRAY};letter-spacing:-.01em">{e(text)}</div></td></tr>{gap(28)}')
 
 
 def render(blocks, header, now, footer, preheader=""):
@@ -150,30 +125,26 @@ def render(blocks, header, now, footer, preheader=""):
     by = {b.key: b for b in blocks}
     urgent_n = len([i for i in by["priority"].items if i.kind not in ("followup", "more")]) if "priority" in by else 0
     bills_n = len(by["followup"].items) if "followup" in by else 0
-    events_n = len([i for i in by["schedule"].items if i.kind == "event"]) if "schedule" in by else 0
     work_n = sum(len(by[k].items) for k in ("homework", "exams") if k in by)
-    stats = "".join([stat(urgent_n, "Urgent", RED if urgent_n else "#7dd3a8"), stat(events_n, "Events", CYAN),
-                     stat(work_n, "Due this week", "#b9a6ff"), stat(bills_n, "Bills", AMBER if bills_n else "#7dd3a8")])
+    bits = [f"{urgent_n} urgent" if urgent_n else "", f"{work_n} due this week" if work_n else "", f"{bills_n} to follow up" if bills_n else ""]
+    summary = " · ".join(b for b in bits if b) or "All clear"
     greeting = by["greeting"].text
     closing = by["closing"].text if "closing" in by else ""
 
-    cards = []
-    for key in ("priority", "allclear", "schedule", "schedule_empty", "homework", "homework_none", "exams", "notices", "followup",
-                "statements", "paid", "health", "admin", "travel", "renewals", "action", "other"):
+    body = []
+    for key in ("priority", "allclear", "schedule", "schedule_empty", "early", "homework", "homework_none", "exams", "notices", "followup",
+                "paid", "people", "school", "invites", "health", "admin", "travel", "renewals", "action", "other"):
         blk = by.get(key)
         if not blk:
             continue
         if key == "followup":
-            lead = "Bills to follow up on:"
             if blk.items:
-                blk = type(blk)("followup", blk.text and "Follow up with these, in order of urgency:" or lead, blk.items)
-                cards.append(section(blk, today))
-        elif key in ("allclear", "schedule_empty", "homework_none"):
-            cards.append(sentence_card(blk.text, {"allclear": GREEN, "schedule_empty": CYAN, "homework_none": VIOLET}[key]))
-        elif key == "statements":
-            cards.append(sentence_card(blk.text, AMBER))
+                blk = type(blk)("followup", "Follow up with", blk.items)
+                body.append(group(blk, today))
+        elif key in ("allclear", "schedule_empty", "homework_none", "early"):
+            body.append(sentence(blk.text))
         else:
-            cards.append(section(blk, today))
+            body.append(group(blk, today))
     pre = escape(preheader or greeting)[:140]
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -181,21 +152,21 @@ def render(blocks, header, now, footer, preheader=""):
 <title>{e(header)}</title>{CSS}</head>
 <body class="page" style="margin:0;padding:0;background:{PAGE}">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">{pre}&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;</div>
-<table role="presentation" class="page" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:{PAGE}"><tr><td align="center" style="padding:24px 12px">
-<table role="presentation" class="wrap" width="640" cellspacing="0" cellpadding="0" border="0" style="width:640px;max-width:640px">
+<table role="presentation" class="page" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:{PAGE}"><tr><td align="center" style="padding:36px 0 40px">
+<table role="presentation" class="wrap" width="600" cellspacing="0" cellpadding="0" border="0" style="width:600px;max-width:600px">
 
-<tr><td class="pad" style="background:{NAVY};background-image:linear-gradient(135deg,#0b1d3a 0%,#12325f 100%);border-radius:18px;padding:30px 32px 26px">
-  <div style="font:700 11px/14px {FONT};letter-spacing:.2em;text-transform:uppercase;color:{CYAN}">Bruno &nbsp;·&nbsp; {e(header.split(" — ")[0])}</div>
-  <div class="hero-title" style="font:800 32px/38px {FONT};color:#ffffff;margin:8px 0 10px">{e(now.strftime("%A, %B ") + str(now.day))}</div>
-  <div style="font:400 16px/25px {FONT};color:#d6e2f5">{e(greeting)}</div>
-  <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px"><tr>{stats}</tr></table>
+<tr><td class="pad" style="padding:0 20px">
+  <div class="gray" style="font:500 15px/20px {FONT};color:{GRAY}">{e(now.strftime("%B ") + str(now.day))} &nbsp;·&nbsp; {e(header.split(" — ")[0])}</div>
+  <div class="big ink" style="font:700 40px/44px {FONT};color:{INK};letter-spacing:-.03em;margin:4px 0 10px">{e(now.strftime("%A"))}</div>
+  <div class="gray" style="font:400 19px/27px {FONT};color:{GRAY};letter-spacing:-.01em">{e(greeting)}</div>
+  <div class="ink" style="font:500 15px/22px {FONT};color:{INK};margin-top:14px">{e(summary)}</div>
 </td></tr>
-<tr><td style="height:16px;line-height:16px;font-size:0">&nbsp;</td></tr>
+{gap(32)}
 
-{"".join(cards)}
+{"".join(body)}
 
-<tr><td class="pad" align="center" style="padding:6px 26px 4px">
-  <div class="ink" style="font:italic 500 16px/24px {FONT};color:{INK}">{e(closing)}</div>
-  <div class="muted" style="font:400 12px/18px {FONT};color:{MUTED};margin-top:10px">{e(footer)}</div>
+<tr><td class="pad" align="center" style="padding:4px 20px 0">
+  <div class="gray" style="font:400 17px/25px {FONT};color:{GRAY};letter-spacing:-.01em">{e(closing)}</div>
+  <div class="faint" style="font:400 12px/18px {FONT};color:{FAINT};margin-top:14px">{e(footer)}</div>
 </td></tr>
 </table></td></tr></table></body></html>"""

@@ -265,8 +265,10 @@ class Tests(unittest.TestCase):
         html = FakeGoogle.sent[3]
         self.assertIn("prefers-color-scheme: dark", html)                    # dark mode
         self.assertIn('name="viewport"', html)                               # phone friendly
+        self.assertNotIn("no AI", html)                                      # you asked not to see that line
+        self.assertNotIn("no AI", FakeGoogle.sent[2])
         self.assertIn("role=\"presentation\"", html)                         # table layout for old clients
-        for need in ("Thursday, October 29", "Dentist", "$144.18", "Conservice utilities", "EXAM".title()):
+        for need in ("Thursday", "October 29", "Dentist", "$144.18", "Conservice utilities", "Exam"):
             self.assertIn(need, html)
         self.assertNotIn("<script>", html)                                   # mail text is escaped, never injected
         self.assertNotIn("http://", html.replace("https://mail.google.com", ""))   # no remote resources

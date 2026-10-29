@@ -328,7 +328,7 @@ def run(argv=None, google=None, now=None):
     label = "Morning" if slot < 12 else "Midday"
     header = f"{label} brief — {now:%a %b %-d}"
     unread = sum(m.unread for m in mails)
-    footer = f"{len(mails)} new emails checked ({unread} unread). Rules only, no AI."
+    footer = f"{len(mails)} new emails checked ({unread} unread)."
     text = "\n\n".join([header] + full + [footer])
     preheader = next((i.text for blk in full_blocks if blk.key == "priority" for i in blk.items if i.kind not in ("more",)), full[0])
     html = email_html.render(full_blocks, header, now, footer, preheader=preheader)
