@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daily Brief Infrastructure Plan</title>
+<style>
+  :root { --bg:#fbfbfa; --fg:#1c1c1e; --muted:#6b6b70; --line:#e3e3e0; --card:#fff; --accent:#0a6cff; --ok:#1a7f37; --warn:#b26a00; --bad:#b3261e; --chip:#eef3ff; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#121214; --fg:#ececee; --muted:#9a9aa2; --line:#2a2a2f; --card:#1a1a1e; --accent:#6aa5ff; --ok:#4cc38a; --warn:#e0a13a; --bad:#ff7b72; --chip:#1d2a44; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.55 -apple-system,"Segoe UI",Roboto,sans-serif; }
+  main { max-width:880px; margin:0 auto; padding:32px 16px 80px; }
+  h1 { font-size:28px; margin:0 0 4px; letter-spacing:-.01em; }
+  h2 { font-size:20px; margin:44px 0 10px; padding-top:12px; border-top:1px solid var(--line); }
+  h3 { font-size:15px; margin:22px 0 6px; }
+  p, li { max-width:70ch; }
+  .sub { color:var(--muted); margin:0 0 24px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  .card b { display:block; margin-bottom:4px; }
+  .chip { display:inline-block; font-size:12px; font-weight:600; padding:1px 8px; border-radius:99px; background:var(--chip); color:var(--accent); }
+  .ok { color:var(--ok); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+  table { width:100%; border-collapse:collapse; font-size:14px; background:var(--card); border:1px solid var(--line); border-radius:10px; overflow:hidden; display:block; overflow-x:auto; }
+  th, td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); white-space:nowrap; }
+  tr:last-child td { border-bottom:0; }
+  code { font:13px ui-monospace,Menlo,Consolas,monospace; background:var(--chip); padding:1px 5px; border-radius:4px; }
+  a { color:var(--accent); }
+  .callout { border-left:3px solid var(--warn); background:var(--card); padding:10px 14px; border-radius:0 8px 8px 0; margin:14px 0; }
+  .callout.good { border-color:var(--ok); }
+  svg { width:100%; height:auto; }
+  svg text { fill:var(--fg); font:12px -apple-system,"Segoe UI",sans-serif; }
+  svg .box { fill:var(--card); stroke:var(--line); stroke-width:1.2; }
+  svg .hot { fill:var(--chip); stroke:var(--accent); }
+  svg .arrow { stroke:var(--muted); stroke-width:1.4; fill:none; marker-end:url(#a); }
+  svg .dash { stroke-dasharray:4 3; }
+  svg .small { fill:var(--muted); font-size:10.5px; }
+</style>
+</head>
+<body>
+<main>
+<h1>Daily Brief — infrastructure plan</h1>
+<p class="sub">Rule-based (no AI) 7am + noon briefing, delivered to iMessage. Revision 2 · private GitHub repo · target cost $0, ceiling a couple dollars a month.</p>
+
+<div class="grid">
+  <div class="card"><b>Runs on</b>GitHub Actions cron in a private repo. Nothing of yours needs to be awake.</div>
+  <div class="card"><b>Reads</b>Google Calendar (incl. the Canvas feed) and Gmail, read-only.</div>
+  <div class="card"><b>Delivers via</b>Email + push now; iMessage through an iPhone Shortcut bridge (free) or a paid iMessage API (optional).</div>
+  <div class="card"><b>Cost</b>$0 baseline. $4.99 one-time for guaranteed push. iMessage-as-a-service is the only thing that breaks the budget.</div>
+</div>
+
+<h2>1. Architecture</h2>
+<svg viewBox="0 0 860 330" role="img" aria-label="Architecture diagram">
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8a8a92"/></marker></defs>
+  <rect class="box hot" x="10" y="20" width="170" height="60" rx="8"/><text x="95" y="46" text-anchor="middle">GitHub Actions cron</text><text x="95" y="63" text-anchor="middle" class="small">4 UTC triggers → 7am &amp; 12pm ET</text>
+  <rect class="box" x="230" y="20" width="170" height="60" rx="8"/><text x="315" y="46" text-anchor="middle">Slot gate + catch-up</text><text x="315" y="63" text-anchor="middle" class="small">skip DST twin, window = last brief</text>
+  <rect class="box" x="450" y="20" width="190" height="60" rx="8"/><text x="545" y="46" text-anchor="middle">Collectors (stdlib Python)</text><text x="545" y="63" text-anchor="middle" class="small">Calendar · Gmail (read-only)</text>
+  <rect class="box" x="690" y="20" width="160" height="60" rx="8"/><text x="770" y="46" text-anchor="middle">Rules engine</text><text x="770" y="63" text-anchor="middle" class="small">config.toml regex, $ + due dates</text>
+  <path class="arrow" d="M180,50 H230"/><path class="arrow" d="M400,50 H450"/><path class="arrow" d="M640,50 H690"/>
+  <rect class="box" x="690" y="140" width="160" height="60" rx="8"/><text x="770" y="166" text-anchor="middle">Renderer</text><text x="770" y="183" text-anchor="middle" class="small">full HTML + short text (≤1,000 chars)</text>
+  <path class="arrow" d="M770,80 V140"/>
+  <rect class="box" x="450" y="140" width="190" height="60" rx="8"/><text x="545" y="166" text-anchor="middle">Dispatcher</text><text x="545" y="183" text-anchor="middle" class="small">tries each channel, logs result</text>
+  <path class="arrow" d="M690,170 H640"/>
+  <rect class="box" x="20" y="250" width="190" height="60" rx="8"/><text x="115" y="276" text-anchor="middle">Email to self (Gmail send)</text><text x="115" y="293" text-anchor="middle" class="small">full brief · source of truth</text>
+  <rect class="box" x="250" y="250" width="190" height="60" rx="8"/><text x="345" y="276" text-anchor="middle">Push (Pushover / ntfy)</text><text x="345" y="293" text-anchor="middle" class="small">short brief · reliable fallback</text>
+  <rect class="box hot" x="480" y="250" width="190" height="60" rx="8"/><text x="575" y="276" text-anchor="middle">iPhone Shortcut → iMessage</text><text x="575" y="293" text-anchor="middle" class="small">triggered by the short email</text>
+  <rect class="box" x="710" y="250" width="140" height="60" rx="8"/><text x="780" y="276" text-anchor="middle">Paid iMessage API</text><text x="780" y="293" text-anchor="middle" class="small">optional · ~$39/mo</text>
+  <path class="arrow" d="M545,200 V225 H115 V250"/><path class="arrow" d="M545,200 V225 H345 V250"/><path class="arrow" d="M545,200 V250 H575" /><path class="arrow dash" d="M545,200 V225 H780 V250"/>
+  <rect class="box" x="20" y="140" width="190" height="60" rx="8"/><text x="115" y="166" text-anchor="middle">Watchdog workflow</text><text x="115" y="183" text-anchor="middle" class="small">9am / 1pm: was a brief sent? else alert</text>
+</svg>
+<p>The job is stateless. “State” (when the last brief went out) is read back from Gmail itself, so there is no database to host, secure or lose.</p>
+
+<h2>2. Delivery: iMessage is the hard part</h2>
+<div class="callout"><b>Fact:</b> Apple has no iMessage API, and there is no free way to send a real iMessage from a cloud server. Every server-side option is either a third-party service running real Apple hardware, or something on <em>your</em> iPhone/Mac. Pricing below comes from vendor-run comparison pages, so confirm on each vendor's site.</div>
+<table>
+  <tr><th>Option</th><th>Real iMessage?</th><th>Cost</th><th>Needs your device on?</th><th>Verdict</th></tr>
+  <tr><td><b>A. iPhone Shortcut bridge</b><br>Cloud sends a short email → an <em>email-triggered</em> Personal Automation (Run Immediately ON) runs <code>Send Message</code></td><td class="ok">Yes (blue bubble)</td><td class="ok">$0</td><td class="warn">Phone must be on, online, and receive the email</td><td><b>Try first.</b> Event-driven, so no clock reliance. Unverified for message-to-self; reports of the prompt “run?” appearing instead of running silently. Must be tested on your phone.</td></tr>
+  <tr><td><b>B. Time-of-day Shortcut</b> that fetches the brief from a private URL and sends it</td><td class="ok">Yes</td><td class="ok">$0</td><td class="warn">Phone on/unlocked at trigger time</td><td>Worse than A (needs a hosted endpoint + clock). Skip unless A fails.</td></tr>
+  <tr><td><b>C. Pushover</b> push notification</td><td class="bad">No (a notification)</td><td class="ok">$4.99 one-time <a href="https://pushover.net/pricing">(pricing)</a></td><td class="ok">No</td><td><b>Adopt as the guaranteed channel.</b> Arrives even if the Shortcut flakes.</td></tr>
+  <tr><td><b>D. ntfy.sh</b> push</td><td class="bad">No</td><td class="ok">Free tier (rate-limited); paid tiers reported ~$5+/mo</td><td class="ok">No</td><td>Free alternative to C. Public topics are unauthenticated — use a long random topic name.</td></tr>
+  <tr><td><b>E. Twilio SMS</b></td><td class="bad">No (green bubble)</td><td class="warn">Roughly $4–6/mo all-in: number + ~$2/mo sole-prop campaign + $4–15 one-time registration + ~1¢/msg. <a href="https://support.twilio.com/hc/en-us/articles/1260803965530">(Twilio)</a></td><td class="ok">No</td><td>Only if you want a text, not an iMessage. US registration hassle.</td></tr>
+  <tr><td><b>F. Paid iMessage API</b> (Blooio, LoopMessage, Sendblue…)</td><td class="ok">Yes, server-side</td><td class="bad">~$39–100/mo; Sendblue outbound quote-only <a href="https://blooio.com/blog/best-imessage-api-2026">(comparison)</a></td><td class="ok">No</td><td>The only fully hands-off blue-bubble path, and ~10× over your budget. Revisit only if A proves unreliable.</td></tr>
+  <tr><td><b>G. Always-on Mac / old iPhone as relay</b></td><td class="ok">Yes</td><td class="warn">Hardware you already own</td><td class="bad">Yes, always</td><td>Contradicts the “nothing awake” requirement. Rejected.</td></tr>
+</table>
+<h3>Recommendation</h3>
+<ol>
+  <li><b>Always send the full email</b> (source of truth) and a <b>Pushover push</b> ($4.99 once) so you never miss a brief.</li>
+  <li><b>Also send a short, plain-text “iMessage email”</b> with a fixed subject prefix; build the Shortcut (<em>Automation → Email → sender = yourself, subject contains prefix → Run Immediately → Send Message</em>). Test for a week.</li>
+  <li>If the Shortcut can't run silently or can't text yourself, decide between living with push, SMS (E), or paying for F.</li>
+</ol>
+<p><b>Format constraint:</b> iMessage is a chat, not a document. I'll add a second renderer capped near 1,000 characters: <em>Needs attention</em> first, then next 3 events, then counts (“4 new mail, 2 bills”), with the full detail in the email.</p>
+
+<h2>3. Homework: the Canvas calendar feed</h2>
+<p>You're right: the Canvas feed subscribed in Google Calendar is the most reliable homework source, and it carries course, title, due time and link. So I'm changing the design, not just the keywords:</p>
+<ul>
+  <li>Add <code>homework_calendars = ["&lt;name of your Canvas calendar&gt;"]</code> to <code>config.toml</code>. <b>Every event on that calendar is treated as an assignment</b> — no guessing from words. The keyword regex remains only for your normal calendars.</li>
+  <li>Parse the course tag from the title (Canvas appends <code>[COURSE]</code>) and group the homework section by course, sorted by due time, with “due in 3h / tomorrow 11:59pm” phrasing.</li>
+  <li>Surface overdue-today and due-within-24h items under <em>Needs attention</em>.</li>
+  <li><b>Caveat:</b> Google refreshes subscribed (ICS) calendars on its own schedule, so newly posted assignments can appear hours late. Nothing we run can speed that up; the brief shows whatever Google has.</li>
+  <li><b>Assumption to check:</b> subscribed calendars are readable through the Calendar API like any other calendar. I expect so, but I'll confirm during the first dry run.</li>
+</ul>
+
+<h2>4. Hosting &amp; scheduling</h2>
+<table>
+  <tr><th>Option</th><th>Finding</th><th>Decision</th></tr>
+  <tr><td>GitHub Actions <code>schedule</code></td><td>Can start late under load. Public repos get scheduled workflows <b>auto-disabled after 60 days of no activity</b> (<a href="https://dev.to/gautamkrishnar/how-to-prevent-github-from-suspending-your-cronjob-based-triggers-knf">ref</a>). Private repo + free-tier minutes is ample: ~120 runs/mo × &lt;1 min.</td><td><b>Primary.</b> Repo is private (your call).</td></tr>
+  <tr><td>Vercel Cron</td><td>Hobby: once per day, fires anywhere in the hour (<a href="https://vercel.com/docs/cron-jobs/usage-and-pricing">docs</a>). Cannot do two sends/day.</td><td>Rejected on free tier.</td></tr>
+  <tr><td>Cloudflare Workers cron / AWS EventBridge</td><td>Precise and very reliable; extra setup; free tiers fit.</td><td><b>Fallback</b> if Actions proves flaky.</td></tr>
+</table>
+<p>Cron <code>5 11,12,16,17 * * *</code> covers 7:05 and 12:05 America/New_York in both EDT and EST; the off-season twin exits at the slot gate. A 1-hour grace window absorbs GitHub queue delay.</p>
+
+<h2>5. Auth, secrets &amp; privacy</h2>
+<ul>
+  <li>Scopes: <code>calendar.readonly</code>, <code>gmail.readonly</code>, <code>gmail.send</code>. It cannot modify or delete anything.</li>
+  <li>The OAuth consent screen must be <b>In production</b>; “Testing” refresh tokens expire after 7 days, and tokens issued before publishing keep that limit, so authorize <em>after</em> publishing (<a href="https://www.unipile.com/google-oauth-refresh-token/">ref</a>). Gmail scopes are “restricted”; a one-user unverified app shows a warning screen but is intended to work — I'll confirm on first run.</li>
+  <li>Secrets live only in GitHub Actions secrets: Google client id/secret/refresh token, Pushover keys. Private repo is required because dry-run logs print mail subjects.</li>
+  <li>Logs will print counts and categories only, never subjects or bodies, on scheduled runs.</li>
+</ul>
+
+<h2>6. Problems to fix</h2>
+<table>
+  <tr><th>#</th><th>Problem</th><th>Severity</th><th>Fix</th></tr>
+  <tr><td>1</td><td>A skipped or late run silently drops that window's mail (fixed 7am/noon windows).</td><td class="bad">High</td><td>Window starts at the last brief sent, found by searching Gmail for the brief's own subject (stateless, read-only).</td></tr>
+  <tr><td>2</td><td>No alert on failure. A revoked token, 60-day pause, or API error produces silence.</td><td class="bad">High</td><td><code>if: failure()</code> step pushes an alert; separate watchdog workflow checks at 9am/1pm that a brief exists.</td></tr>
+  <tr><td>3</td><td>Homework detection is a broad regex (“project”, “final”, “reading”, “due” match unrelated events).</td><td class="warn">Medium</td><td>Canvas-calendar-as-source (§3); regex limited to non-Canvas calendars.</td></tr>
+  <tr><td>4</td><td>Same bill reappears in every brief; no “already told you” memory.</td><td class="warn">Medium</td><td>Show a bill again only if newly arrived or due ≤3 days; use the prior brief's content (via Gmail) as dedupe memory.</td></tr>
+  <tr><td>5</td><td>Excluding Promotions/Social tabs can hide real statements Gmail mis-files.</td><td class="warn">Medium</td><td>Keep exclusion, but always include mail from allow-listed financial/medical senders regardless of tab.</td></tr>
+  <tr><td>6</td><td>Noisy rules: “verification code”, “delivered”, “appointment” fire on junk.</td><td class="warn">Medium</td><td>Tune on your real mail during a one-week dry run; add a “seen but uncategorised from known senders” footer to spot gaps.</td></tr>
+  <tr><td>7</td><td>Search returns max 100 messages; heavy days truncate.</td><td>Low</td><td>Paginate; cap with a “+N more” line.</td></tr>
+  <tr><td>8</td><td>Only email delivery exists; no iMessage/push.</td><td class="bad">High</td><td>Dispatcher with channels (§2) and a short-format renderer.</td></tr>
+  <tr><td>9</td><td>Repo visibility unknown; dry-run output contains mail subjects.</td><td class="warn">Medium</td><td>Private repo; metadata-only logs.</td></tr>
+  <tr><td>10</td><td>No real-data testing yet — all tests use a fake Google client.</td><td class="warn">Medium</td><td>Add anonymised fixtures from your real inbox; run a dry run before enabling sends.</td></tr>
+</table>
+
+<h2>7. Money &amp; banks</h2>
+<p>Credit-card and bill emails already provide amount due, due date and fraud alerts, so no bank connection is needed for the brief. If you later want balances, <b>SimpleFIN Bridge</b> is read-only (cannot move money), refreshes about daily, and is published at roughly $15/yr — their pages disagree on price structure, so <a href="https://bridge.simplefin.org/simple">confirm</a>. It is deliberately <em>not</em> in the first release.</p>
+
+<h2>8. Build order</h2>
+<table>
+  <tr><th>Phase</th><th>Scope</th><th>Cost</th></tr>
+  <tr><td><span class="chip">0</span> done</td><td>MVP: calendar + Gmail rules → email; tests; workflow.</td><td>$0</td></tr>
+  <tr><td><span class="chip">1</span> next</td><td>Problems #1, #2, #3, #9: catch-up window, failure alert + watchdog, Canvas-calendar homework, private-repo logging.</td><td>$0</td></tr>
+  <tr><td><span class="chip">2</span></td><td>Delivery: short renderer, Pushover push, email-triggered iMessage Shortcut (you build/test on phone, I supply the exact email format + steps).</td><td>$4.99 once</td></tr>
+  <tr><td><span class="chip">3</span></td><td>Rule tuning on real mail (#4–#7, #10), one-week dry-run.</td><td>$0</td></tr>
+  <tr><td><span class="chip">4</span></td><td>Optional: weather (NWS API, free), SimpleFIN balances, paid iMessage API if the Shortcut bridge isn't reliable.</td><td>$0 – $15/yr – ~$39/mo</td></tr>
+</table>
+
+<h2>9. What I need from you</h2>
+<ul>
+  <li>Confirm the repo is (or will be) <b>private</b>.</li>
+  <li>The name of the Google Calendar that holds the Canvas feed.</li>
+  <li>Is your iPhone generally on and online at 7am and noon? (The Shortcut bridge depends on it.)</li>
+  <li>OK to spend $4.99 on Pushover, or prefer free ntfy?</li>
+  <li>Your timezone (assumed America/New_York).</li>
+</ul>
+
+<h2>Sources</h2>
+<ul>
+  <li><a href="https://blooio.com/blog/best-imessage-api-2026">iMessage API comparison (Blooio, vendor-authored)</a> · <a href="https://tuco.ai/blog/imessage-api-pricing-comparison-2026">tuco.ai pricing comparison</a></li>
+  <li><a href="https://support.twilio.com/hc/en-us/articles/1260803965530">Twilio A2P 10DLC sole proprietor fees</a></li>
+  <li><a href="https://pushover.net/pricing">Pushover pricing</a> · <a href="https://docs.ntfy.sh/faq/">ntfy FAQ</a></li>
+  <li><a href="https://www.val.town/embed/x/dcm31/iosEmailAutomation/README.md">Email-triggered iOS automation template (Run Immediately)</a> · <a href="https://discussions.apple.com/thread/255550769">Apple Community: silent automations</a></li>
+  <li><a href="https://vercel.com/docs/cron-jobs/usage-and-pricing">Vercel Cron limits</a> · <a href="https://dev.to/gautamkrishnar/how-to-prevent-github-from-suspending-your-cronjob-based-triggers-knf">GitHub 60-day schedule pause</a> · <a href="https://www.unipile.com/google-oauth-refresh-token/">Google refresh-token lifetime</a></li>
+</ul>
+</main>
+</body>
+</html>
