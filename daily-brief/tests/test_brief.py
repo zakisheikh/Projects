@@ -184,6 +184,17 @@ class Tests(unittest.TestCase):
         self.assertIn("Conservice", tg)
         self.assertNotIn("$40.00", tg)
 
+    def test_morning_covers_until_noon_and_noon_covers_the_rest(self):
+        morning = self.run_text(FakeGoogle(MAIN), now=datetime(2026, 10, 29, 7, 17, tzinfo=TZ))
+        noon = self.run_text(FakeGoogle(MAIN), now=NOW)
+        self.assertIn("Standup", morning)              # 9am is before the noon check
+        self.assertNotIn("Dentist", morning)           # 3pm belongs to the noon brief
+        self.assertIn("Dentist", noon)
+        self.assertNotIn("Standup", noon)
+        for text in (morning, noon):                   # homework for the week appears in both
+            self.assertIn("Essay 2 for Databases (Tuesday)", text)
+            self.assertIn("Final Project: Proposal for ML (tomorrow", text)
+
     def test_paid_settles_due(self):
         paid = msg("c9", "noreplyalerts@chase.com", "We've received your Sample Visa payment", day=28)
         self.assertNotIn("$40.00", self.run_text(FakeGoogle(MAIN + [paid])))

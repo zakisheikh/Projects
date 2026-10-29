@@ -9,14 +9,13 @@ from . import render
 @dataclass
 class Bundle:
     failures: list = field(default_factory=list)
-    hw_urgent: list = field(default_factory=list)
+    hw_week: list = field(default_factory=list)
     notice_urgent: list = field(default_factory=list)
     dues_urgent: list = field(default_factory=list)
     alerts: list = field(default_factory=list)
     today: list = field(default_factory=list)
     prayer: list = field(default_factory=list)
     tomorrow: list = field(default_factory=list)
-    hw_later: list = field(default_factory=list)
     notices_later: list = field(default_factory=list)
     dues_later: list = field(default_factory=list)
     health: list = field(default_factory=list)
@@ -82,9 +81,10 @@ def place(loc):
 
 
 class Narrator:
-    def __init__(self, voice, aliases, today, redact_health=True, compact=False, caps=None):
+    def __init__(self, voice, aliases, today, redact_health=True, compact=False, caps=None, show_tomorrow=False):
         self.v, self.aliases, self.today, self.redact, self.compact = voice, aliases, today, redact_health, compact
-        self.caps = {"priority": 3, "events": 4, "list": 5, **(caps or {})}
+        self.show_tomorrow = show_tomorrow
+        self.caps = {"priority": 3, "events": 6, "list": 5, "week": 8, **(caps or {})}
         if not compact:
             self.caps.update(priority=99, events=12)
 
@@ -113,21 +113,8 @@ class Narrator:
     # ---- sentences for individual items
     def hw_sentence(self, e, notice=False):
         d = e.start.date()
-        return self.v.say("notice_urgent" if notice else "hw_urgent", item=self.hw_text(e),
+        return self.v.say("notice_urgent", item=self.hw_text(e),
                           when=when(d, self.today), hint=f" {e.hint}" if e.hint else "")
-
-    def bill_sentence(self, m):
-        who = m.biller or render.sender_name(m)
-        auto = ""
-        if m.note == "autopay OFF":
-            auto = self.v.say("autopay_off")
-        elif m.note == "autopay on":
-            auto = self.v.say("autopay_on")
-        amount = m.amount
-        if m.due < self.today:
-            return self.v.say("bill_late", who=who, when=when(m.due, self.today), amount_part=f" ({amount})" if amount else "")
-        key = "bill_due_amt" if amount else "bill_due_noamt"
-        return self.v.say(key, who=who, amount=amount or "", when=when(m.due, self.today), auto=auto)
 
     def followups(self, b):
         """One entry per biller needing action, most urgent first: dues soon, dues later, newly arrived bills."""
@@ -170,7 +157,6 @@ class Narrator:
 
         # priority items, most urgent first
         sentences = [v.say("account_fault", account=f.split(":")[0], why=f.split(":", 1)[-1].strip()[:80]) for f in b.failures]
-        sentences += [self.hw_sentence(e) for e in b.hw_urgent]
         sentences += [self.hw_sentence(e, notice=True) for e in b.notice_urgent]
         follow = self.followup_sentence(b)
         if follow and b.dues_urgent:
@@ -190,32 +176,31 @@ class Narrator:
             items = [self.event_text(e) for e in evs[: self.caps["events"]]]
             if len(evs) > self.caps["events"]:
                 items.append(v.say("more_items", k=len(evs) - self.caps["events"]))
-            para = v.say("schedule_open", items=join_list(items))
+            para = v.say("schedule_morning_open" if slot < 12 else "schedule_open", items=join_list(items))
             if len(evs) >= 5 and not self.compact:
                 para += " " + v.say("quip_busy")
             out.append(para)
         else:
-            out.append(v.say("schedule_empty"))
+            out.append(v.say("schedule_morning_empty" if slot < 12 else "schedule_empty"))
         if b.prayer and not self.compact:
             out.append(v.say("prayer_line", items=join_list([f"{e.title} at {clock(e.start)}" for e in b.prayer])))
-        if b.tomorrow and slot >= 12:
+        if b.tomorrow and slot >= 12 and self.show_tomorrow:
             items = self.capped([self.event_text(e) for e in b.tomorrow], "events" if self.compact else "list")
             out.append(v.say("tomorrow_open", items=join_list(items)))
 
         extras = []   # compact mode folds the minor stuff into a single closing line
-        # coursework
-        if self.compact:
-            if b.hw_later:
-                extras.append(plural(len(b.hw_later), "more assignment") + " this week")
-        else:
-            if b.hw_later:
-                items = [f"{self.hw_text(e)} on {when(e.start.date(), self.today)}" for e in b.hw_later]
-                out.append(v.say("homework_open", items=join_list(self.capped(items))))
-            elif not b.any_homework:
-                out.append(v.say("homework_none"))
-            if b.notices_later:
-                items = [f"{self.hw_text(e)}, {when(e.start.date(), self.today)}" for e in b.notices_later]
-                out.append(v.say("notices_open", items=join_list(self.capped(items))))
+        # coursework for the week, soonest first (the same in both briefs)
+        if b.hw_week:
+            items = []
+            for e in sorted(b.hw_week, key=lambda e: e.start):
+                tail = when(e.start.date(), self.today) + (f", {e.hint}" if e.hint and e.start.date() <= self.today + timedelta(days=1) else "")
+                items.append(f"{self.hw_text(e)} ({tail})")
+            out.append(v.say("homework_week", items=join_list(self.capped(items, "week"))))
+        elif not b.any_homework:
+            out.append(v.say("homework_none"))
+        if b.notices_later and not self.compact:
+            items = [f"{self.hw_text(e)}, {when(e.start.date(), self.today)}" for e in b.notices_later]
+            out.append(v.say("notices_open", items=join_list(self.capped(items))))
 
         # money: bills are one follow-up line, wherever it belongs
         money = []

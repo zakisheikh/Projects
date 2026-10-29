@@ -137,7 +137,19 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, trace=None):
     def is_notice(e):   # Canvas items that are not assignments: polls, advising/enrollment notices, timed announcements
         return e.homework and (not e.all_day or bool(notice_re.search(e.title)))
 
-    live = [e for e in uniq if on(e, today) and (e.all_day or e.end > now)]
+    # Each brief covers the stretch up to the next check: morning -> until midday, midday -> the rest of the day.
+    later = [h for h in sorted(cfg["slots"]) if h > slot]
+    window_end = now.replace(hour=later[0], minute=0, second=0, microsecond=0) if later else None
+    first_slot = slot == min(cfg["slots"])
+
+    def in_window(e):
+        if not on(e, today):
+            return False
+        if e.all_day:
+            return first_slot            # all-day items are announced once, in the first brief
+        return e.end > now and (window_end is None or e.start < window_end)
+
+    live = [e for e in uniq if in_window(e)]
     b = Bundle()
     b.today = [e for e in live if not e.compact and not e.homework]
     b.prayer = [e for e in live if e.compact and not e.all_day]
@@ -145,8 +157,7 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, trace=None):
     hw = [e for e in uniq if e.homework and not is_notice(e) and today <= e.start.date() <= horizon]
     notices = [e for e in uniq if is_notice(e) and today <= e.start.date() <= horizon]
     b.any_homework = bool(hw or notices)
-    b.hw_urgent = [e for e in hw if e.start.date() <= tomorrow]
-    b.hw_later = [e for e in hw if e.start.date() > tomorrow]
+    b.hw_week = hw
     b.notice_urgent = [e for e in notices if e.hint and e.start.date() <= tomorrow]
     b.notices_later = [e for e in notices if e not in b.notice_urgent]
 
@@ -201,10 +212,10 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, trace=None):
 
     if trace is not None:
         for e in uniq:
-            where = ("Prayer times" if e in b.prayer else "Today's schedule" if e in b.today else "Tomorrow" if e in b.tomorrow else
-                     "Priority (coursework due soon)" if e in b.hw_urgent else "Priority (class notice)" if e in b.notice_urgent else
-                     "Later coursework" if e in b.hw_later else "Later class notices" if e in b.notices_later else
-                     "not shown (already over, or outside the window)")
+            where = ("Prayer times" if e in b.prayer else "This brief's schedule" if e in b.today else "Tomorrow" if e in b.tomorrow else
+                     "Coursework this week" if e in b.hw_week else "Priority (class notice)" if e in b.notice_urgent else
+                     "Later class notices" if e in b.notices_later else
+                     "not shown (over, or belongs to the other brief)")
             trace.append(("school" if e.homework else "cal", e.calendar, e.title.strip()[:60], where))
         for m in dropped:
             trace.append(("mail", f"{m.account}: {render.sender_name(m)[:28]}", m.subject[:60], f"dropped by rule: {m.biller} -> ignore"))
@@ -283,7 +294,8 @@ def run(argv=None, google=None, now=None):
     def speak(compact):   # two tellings of the same day: a short one for Telegram, the full one for email
         v = Voice.load(pcfg.get("name", "Bruno"), pcfg.get("user", ""), seed, st.get("phrases"), address=pcfg.get("address", "sir"))
         nar = Narrator(v, aliases, now.date(), cfg["delivery"].get("telegram_redact_health", True) if compact else False, compact,
-                       {"priority": bcfg.get("telegram_max_priority", 3), "events": bcfg.get("telegram_max_events", 4)})
+                       {"priority": bcfg.get("telegram_max_priority", 3), "events": bcfg.get("telegram_max_events", 6)},
+                       show_tomorrow=bcfg.get("noon_tomorrow", False))
         return nar.paragraphs(bundle, slot, now), v
 
     full, voice = speak(False)

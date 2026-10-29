@@ -70,16 +70,6 @@ all_clear = [
   "The decks are clear, {sir}.",
   "No emergencies today. Remarkable.",
 ]
-hw_urgent = [
-  "{item} is due {when}{hint}.",
-  "Your assignment, {item}, is due {when}{hint}.",
-  "Don't let {item} slip past you. It's due {when}{hint}.",
-  "{item}: due {when}{hint}.",
-  "Coursework alert, {sir}. {item} is due {when}{hint}.",
-  "{item} comes due {when}{hint}.",
-  "Mind the clock on {item}. It's due {when}{hint}.",
-  "I'd get to {item} soon, {sir}. Due {when}{hint}.",
-]
 notice_urgent = [
   "{item} wants a response {when}{hint}.",
   "Not an assignment, but {item} needs an answer {when}{hint}.",
@@ -87,30 +77,6 @@ notice_urgent = [
   "{item} closes {when}{hint}. Easy to forget.",
   "Keep an eye on {item}. It closes {when}{hint}.",
 ]
-bill_due_amt = [
-  "{who} is expecting {amount} by {when}{auto}.",
-  "{amount} goes to {who} {when}{auto}.",
-  "{who}: {amount}, due {when}{auto}.",
-  "Don't let {who}'s {amount} slip past {when}{auto}.",
-  "Payment of {amount} to {who} falls due {when}{auto}.",
-  "{who} would like {amount} by {when}{auto}.",
-  "The {who} bill, {amount}, is due {when}{auto}.",
-  "Do remember {who}, {sir}. {amount}, due {when}{auto}.",
-]
-bill_due_noamt = [
-  "{who} has a payment due {when}{auto}.",
-  "A {who} payment falls due {when}{auto}.",
-  "{who} will be wanting settlement {when}{auto}.",
-  "Mind the {who} payment, due {when}{auto}.",
-  "{who}: something is due {when}{auto}. No amount in the notice.",
-]
-bill_late = [
-  "{who} was due {when}{amount_part}. I have no record of payment.",
-  "{who}{amount_part} is past due, {sir}. It was due {when}.",
-  "Overdue, I'm afraid: {who}{amount_part}, due {when}.",
-]
-autopay_off = [", and autopay is off", " (autopay is off, so it's on you)", ", with autopay switched off"]
-autopay_on = [", though autopay should cover it", " (autopay is on)"]
 alert_item = [
   "{who} flagged something: \"{subject}\".",
   "Something from {who} caught my eye: \"{subject}\".",
@@ -170,14 +136,6 @@ tomorrow_open = [
 ]
 
 # ---------------------------------------------------------------- coursework
-homework_open = [
-  "Coming up this week on the coursework front: {items}.",
-  "Further out, you have {items}.",
-  "Academically speaking, {items}.",
-  "On the horizon for school: {items}.",
-  "Keep these in view: {items}.",
-  "Later this week: {items}.",
-]
 homework_none = [
   "No assignments are due this week, {sir}.",
   "Coursework is clear for now.",
@@ -199,19 +157,6 @@ transition_money = [
   "As for the ledger:",
   "A word on money.",
   "Financially speaking:",
-]
-dues_open = [
-  "Still outstanding: {items}.",
-  "Further payments on the horizon: {items}.",
-  "Also on the ledger: {items}.",
-  "Coming due later: {items}.",
-  "Pending obligations, {sir}: {items}.",
-]
-bills_open = [
-  "New in the billing inbox: {items}.",
-  "Fresh statements have arrived: {items}.",
-  "Newly arrived, billing-wise: {items}.",
-  "I've received the following statements: {items}.",
 ]
 paid_open = [
   "On the bright side, these payments cleared: {items}.",
@@ -310,9 +255,6 @@ see_email = [
   "Your email has the complete picture.",
 ]
 more_priority = ["{k} more in your email.", "and {k} more besides, in your email.", "{k} further items are in your email."]
-count_homework = ["Also later this week: {thing}.", "Further out, {thing}.", "On the horizon: {thing}."]
-count_dues = ["Also on the ledger: {thing}.", "Further out, {thing}.", "Coming up after that: {thing}."]
-count_mail = ["In your inbox: {thing} worth a look.", "I've set aside {thing} for you.", "{thing} may deserve your attention."]
 also_line = [
   "Beyond that: {items}.",
   "Also on my radar: {items}.",
@@ -332,4 +274,31 @@ follow_up = [
   "On the billing front, {who} want a follow-up.",
   "Payments to chase: {who}.",
   "Do circle back to {who}.",
+]
+
+# ---------------------------------------------------------------- the two briefings
+schedule_morning_open = [
+  "Between now and my midday check-in: {items}.",
+  "Until I report again at noon, you have {items}.",
+  "Your morning, in order: {items}.",
+  "From now until midday: {items}.",
+  "Before my next report at noon: {items}.",
+  "The morning looks like this: {items}.",
+  "Between now and lunch, {sir}: {items}.",
+  "On the docket until midday: {items}.",
+]
+schedule_morning_empty = [
+  "Nothing on the calendar before midday, {sir}. The morning is yours.",
+  "Your morning is clear. I'll report again at noon.",
+  "No engagements before midday, {sir}.",
+  "A free morning. I'd make use of it.",
+]
+homework_week = [
+  "Coursework this week: {items}.",
+  "On the homework front this week: {items}.",
+  "For the week, school-wise: {items}.",
+  "Your assignments this week, soonest first: {items}.",
+  "Academic deadlines for the week: {items}.",
+  "This week's coursework, {sir}: {items}.",
+  "Homework to keep in view this week: {items}.",
 ]
