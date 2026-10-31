@@ -17,7 +17,7 @@ label = "Calendar"
 url = "https://calendar.google.com/calendar/r/day"
 
 [game]
-enabled = true      # XP, levels ("Mark I", "Mark II"...), a streak of days with nothing overdue, a weekly score
+enabled = false     # XP, levels ("Mark I", "Mark II"...), a streak of days with nothing overdue, a weekly score
 max_buttons = 8     # Done buttons under the Telegram brief
 
 [brief]

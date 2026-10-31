@@ -392,6 +392,7 @@ class Tests(unittest.TestCase):
         tgm.send = lambda tok, chat, html, buttons=None: sent.append((html, buttons))
         cfg = bm.load_config()
         cfg["delivery"]["channels"] = ["telegram", "email"]
+        cfg["game"]["enabled"] = True
         bm.load_config = lambda path=None: cfg
         os.environ.update(TELEGRAM_BOT_TOKEN="t", TELEGRAM_CHAT_ID="42")
         path = os.path.join(tempfile.mkdtemp(), "state.json")
@@ -416,6 +417,27 @@ class Tests(unittest.TestCase):
             st = json.load(f)
         self.assertEqual(st["tg_offset"], 8)
         self.assertGreater(st["game"]["xp"], 0)
+
+    def test_game_off_means_no_scoreboard_or_buttons(self):
+        import os
+        import brief.main as bm
+        import brief.telegram as tgm
+        sent = []
+        orig = tgm.send
+        tgm.send = lambda tok, chat, html, buttons=None: sent.append((html, buttons))
+        cfg = bm.load_config()
+        cfg["delivery"]["channels"] = ["telegram", "email"]
+        self.assertFalse(cfg["game"]["enabled"])
+        bm.load_config = lambda path=None: cfg
+        os.environ.update(TELEGRAM_BOT_TOKEN="t", TELEGRAM_CHAT_ID="42")
+        try:
+            run(["--force"], google=FakeGoogle(MAIN), now=NOW)
+        finally:
+            tgm.send = orig
+        html, buttons = sent[-1]
+        self.assertFalse(buttons)
+        self.assertNotIn("XP", html)
+        self.assertNotIn("Mark I", FakeGoogle.sent[3])
 
     def test_paid_settles_due(self):
         paid = msg("c9", "noreplyalerts@chase.com", "We've received your Sample Visa payment", day=28)
