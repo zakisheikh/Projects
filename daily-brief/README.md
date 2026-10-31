@@ -54,6 +54,15 @@ Each notice becomes an event (due / statement / paid / balance / alert / receipt
 *Upcoming payments* list for `lookback_days` until a later "payment received" notice from the same biller settles it; autopay-off is flagged.
 To add a biller, copy a block and replay it against a real subject line.
 
+## The to-do game
+Coursework (this week, plus exams) and bills on the follow-up line become to-dos. The Telegram brief carries a
+Done button for each; the next brief reads the taps (Telegram holds them for about a day) and scores them.
+Bills also score on their own when the biller's "payment received" email arrives.
+- XP: 20 per assignment, 30 for project milestones, 40 for exams, +10/+20 for finishing 1/3+ days early, half if late;
+  bills 15, +5 if on time. Levels are "Mark I", "Mark II"... (100, 250, 450, 700 XP ...).
+- Streak: days in a row with nothing overdue, judged at the morning brief. Weekly score Monday to Sunday, with a recap on Sunday mornings.
+- Bruno comments from the `game_*` banks in `phrases.toml`. Turn it all off with `[game] enabled = false`.
+
 ## Notes / limits
 - Homework is inferred from calendar event titles/descriptions matching `homework_pattern`, plus school-sender mail.
 - Classification looks at subject + Gmail snippet; amounts/due dates for bills are read from the full body.

@@ -31,6 +31,7 @@ class Bundle:
     people: list = field(default_factory=list)
     other: list = field(default_factory=list)
     early: list = field(default_factory=list)       # tomorrow's first event if it starts before 8am (last brief only)
+    game: object = None                             # game.Report, when the to-do game is on
     any_homework: bool = False
 
 
@@ -218,6 +219,9 @@ class Narrator:
         else:
             blocks.append(Block("allclear", text=v.say("all_clear")))
 
+        if b.game:
+            blocks.append(self.game_block(b.game))
+
         # the schedule window this brief is responsible for
         if b.today:
             items = [Item(self.event_text(e), "event", title=e.title.strip() + self.span_note(e), link=e.link,
@@ -281,6 +285,27 @@ class Narrator:
                     blocks.append(Block(key, v.say(bank), self.capped_items(items)))
         blocks.append(Block("closing", text=v.say("closing_morning" if slot < 12 else "closing_noon")))
         return blocks
+
+    def game_block(self, g):
+        from .game import bar, level_name
+        v = self.v
+        week = f"this week {g.week_done} of {g.week_total} {bar(g.week_done, g.week_total)}".rstrip() if g.week_total else ""
+        streak = f"{g.streak}-day streak" if g.streak else "no streak yet"
+        line = " · ".join(x for x in (level_name(g.level), f"{g.xp} XP", streak, week) if x)
+        notes = []
+        if g.done_now:
+            notes.append(v.say("game_done", items=join_list([t for t, _ in g.done_now]), xp=sum(x for _, x in g.done_now)))
+        if g.leveled_up:
+            notes.append(v.say("game_level_up", level=level_name(g.level)))
+        if g.streak_event == "record":
+            notes.append(v.say("game_streak_record", n=g.streak))
+        elif g.streak_event == "broken":
+            notes.append(v.say("game_streak_broken", item=g.broke_on))
+        if g.recap:
+            notes.append(v.say("game_recap", done=g.week_done, total=g.week_total, xp=g.week_xp, best=g.best))
+        if not notes and g.week_total and g.week_done == 0 and self.today.weekday() >= 3:
+            notes.append(v.say("game_nudge"))
+        return Block("game", v.say("game_lead"), text=line, notes=notes)
 
     def is_partner(self, e):
         return bool(self.partner_label and e.creator in self.partner_emails and self.partner_label.lower() not in e.title.lower())

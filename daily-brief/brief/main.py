@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import re
 import sys
@@ -7,7 +8,7 @@ from datetime import datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import classify, email_html, render, state as stmod, telegram
+from . import classify, email_html, game, render, state as stmod, telegram
 from .narrate import Bundle, Narrator, to_paragraphs
 from .voice import Voice
 from .google import Google
@@ -250,6 +251,58 @@ def assemble(events, mails, open_bills, failures, now, slot, cfg, trace=None):
     return b
 
 
+def game_todos(b):
+    """The to-dos the game tracks: this week's coursework and exams, and every bill on the follow-up line."""
+    out, seen = [], set()
+    for e in list(b.hw_week) + list(b.exams):
+        title = re.sub(r"\s*\((classic|new)\)\s*$", "", e.title.strip(), flags=re.I)
+        out.append({"id": game.event_id(e), "kind": "exam" if e.exam else "hw", "title": title, "due": e.start.date().isoformat()})
+    for m in list(b.dues_urgent) + list(b.dues_later) + list(b.bills):
+        who = m.biller or render.sender_name(m)
+        if (m.account, who) in seen:
+            continue
+        seen.add((m.account, who))
+        out.append({"id": game.bill_id(m.account, who, m.due), "kind": "bill", "title": who, "who": who, "account": m.account,
+                    "due": m.due.isoformat() if m.due else None})
+    return out
+
+
+def play_game(bundle, mails, st, cfg, now, slot, failures):
+    """Read Done taps from Telegram, score them, and drop finished items from the brief. Returns
+    (report, buttons for the still-open items, the game state to save, the Telegram offset to save)."""
+    state = json.loads(json.dumps(st.get("game", {})))
+    offset, tapped = st.get("tg_offset"), []
+    token, chat = os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID")
+    if token and chat and "telegram" in cfg["delivery"]["channels"]:
+        try:
+            ups = telegram.updates(token, offset)
+            tapped = game.taps(ups, chat)
+            if ups:
+                offset = max(u["update_id"] for u in ups) + 1
+        except Exception as ex:
+            failures.append(f"telegram buttons: {str(ex)[:120]}")
+    todos = game_todos(bundle)
+    paid = {(m.account, m.biller) for m in mails if m.event == "paid" and m.biller}
+    rep = game.play(state, todos, tapped, paid, now, slot == min(cfg["slots"]))
+
+    bundle.hw_week = [e for e in bundle.hw_week if game.event_id(e) not in rep.done_ids]
+    bundle.exams = [e for e in bundle.exams if game.event_id(e) not in rep.done_ids]
+    open_bill = lambda m: game.bill_id(m.account, m.biller or render.sender_name(m), m.due) not in rep.done_ids
+    bundle.dues_urgent = [m for m in bundle.dues_urgent if open_bill(m)]
+    bundle.dues_later = [m for m in bundle.dues_later if open_bill(m)]
+    bundle.bills = [m for m in bundle.bills if open_bill(m)]
+    bundle.game = rep
+
+    buttons = []
+    for t in sorted((t for t in todos if t["id"] not in rep.done_ids), key=lambda t: (t["kind"] == "bill", t["due"] or "9999")):
+        if t["kind"] == "bill":
+            label = f"✓ Paid · {t['title']}"
+        else:
+            label = f"✓ {datetime.fromisoformat(t['due']).strftime('%a %-m/%-d')} · {t['title']}"
+        buttons.append((label[:48], f"done:{t['id']}"))
+    return rep, buttons[: cfg.get("game", {}).get("max_buttons", 8)], state, offset
+
+
 def build_accounts(cfg, google):
     """-> list of (name, client|None, error|None). `google` injects fakes for tests."""
     out = []
@@ -311,6 +364,9 @@ def run(argv=None, google=None, now=None):
 
     trace = [] if args.explain else None
     bundle = assemble(events, mails, open_bills, failures, now, slot, cfg, trace=trace)
+    buttons, game_state, tg_offset = [], st.get("game"), st.get("tg_offset")
+    if cfg.get("game", {}).get("enabled", True):
+        _, buttons, game_state, tg_offset = play_game(bundle, mails, st, cfg, now, slot, failures)
     pcfg = cfg.get("persona", {})
     bcfg = cfg.get("brief", {})
     aliases = cfg["calendar"].get("course_aliases", {})
@@ -333,7 +389,7 @@ def run(argv=None, google=None, now=None):
     text = "\n\n".join([header] + full + [footer])
     preheader = next((i.text for blk in full_blocks if blk.key == "priority" for i in blk.items if i.kind not in ("more",)), full[0])
     links = [(x["label"], x["url"]) for x in cfg.get("links", [])]
-    html = email_html.render(full_blocks, header, now, footer, preheader=preheader, links=links)
+    html = email_html.render(full_blocks, header, now, footer, preheader=preheader, links=links, game_rep=bundle.game)
     tg = telegram.fmt(short)
 
     if args.dry_run:
@@ -343,13 +399,15 @@ def run(argv=None, google=None, now=None):
             for icon, src, what, where in trace:
                 print(f"{icon} {src} | {what}\n     → {where}")
         print("\n--- telegram preview ---\n" + tg.replace("&#x27;", "'").replace("&amp;", "&"))
+        for label, _ in buttons:
+            print(f"[ {label} ]")
         return 0
 
     sent, problems = [], []
     for ch in cfg["delivery"]["channels"]:
         try:
             if ch == "telegram":
-                telegram.send(os.environ["TELEGRAM_BOT_TOKEN"], os.environ["TELEGRAM_CHAT_ID"], tg)
+                telegram.send(os.environ["TELEGRAM_BOT_TOKEN"], os.environ["TELEGRAM_CHAT_ID"], tg, buttons)
             elif ch == "email":
                 sender = next(((n, g) for (n, g, e), a in zip(accounts, cfg["accounts"]) if g and a.get("send_from")), None) \
                     or next(((n, g) for n, g, e in accounts if g), None)
@@ -368,6 +426,10 @@ def run(argv=None, google=None, now=None):
         st["last_sent"] = now.isoformat()
         st["seen"] = stmod.prune_seen({**seen, **{f"{m.account}:{m.id}": now.isoformat() for m in mails}}, now)
         st["phrases"] = {**st.get("phrases", {}), **voice.used}
+        if game_state is not None:
+            st["game"] = game_state
+        if tg_offset:
+            st["tg_offset"] = tg_offset
         late = int((now - now.replace(hour=slot, minute=0, second=0, microsecond=0)).total_seconds() // 60)
         st["history"] = (st.get("history", []) + [f"{now:%Y-%m-%d} slot {slot}h started {late}m after slot, via {','.join(sent)}"])[-30:]
         stmod.save(args.state, st)

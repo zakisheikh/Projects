@@ -145,10 +145,18 @@ class Tests(unittest.TestCase):
             cfg["accounts"] = [{"name": "main", "token_env": "X", "send_from": True}]
             return cfg
         bm.load_config = one_account
+        import brief.telegram as tgm               # never touch the real Telegram API from tests
+        self._orig_updates = tgm.updates
+        tgm.updates = lambda token, offset=None: []
 
     def tearDown(self):
+        import os
         import brief.main as bm
+        import brief.telegram as tgm
         bm.load_config = self._orig_cfg
+        tgm.updates = self._orig_updates
+        for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"):
+            os.environ.pop(k, None)
 
     def run_out(self, google, now=NOW, extra=()):
         import io, contextlib
@@ -330,6 +338,85 @@ class Tests(unittest.TestCase):
         self.assertNotIn("[", out)
         self.assertNotIn("https://", out)
 
+    def test_game_scoring_levels_and_streaks(self):
+        from brief import game
+        hw = {"kind": "hw", "title": "Essay 2", "due": "2026-11-03"}
+        self.assertEqual(game.xp_for(hw, date(2026, 10, 29)), 40)          # 20 + 20 for finishing 3+ days early
+        self.assertEqual(game.xp_for(hw, date(2026, 11, 2)), 30)           # 20 + 10 for a day early
+        self.assertEqual(game.xp_for(hw, date(2026, 11, 3)), 20)           # on the day
+        self.assertEqual(game.xp_for(hw, date(2026, 11, 5)), 10)           # late: half
+        self.assertEqual(game.xp_for({"kind": "exam", "title": "Midterm", "due": "2026-11-02"}, date(2026, 11, 2)), 40)
+        self.assertEqual(game.xp_for({"kind": "hw", "title": "Final Project: Proposal", "due": "2026-10-30"}, date(2026, 10, 30)), 30)
+        self.assertEqual(game.xp_for({"kind": "bill", "title": "Rent", "due": "2026-11-01"}, date(2026, 10, 31)), 20)
+        self.assertEqual([game.level_for(x) for x in (0, 100, 250, 450)], [1, 2, 3, 4])
+        self.assertEqual(game.level_name(4), "Mark IV")
+
+        g = {}
+        t1 = {"id": "a" * 10, "kind": "hw", "title": "Essay 2", "due": "2026-11-03"}
+        D = lambda d, h=7: datetime(2026, 10, d, h, 17, tzinfo=TZ) if d <= 31 else datetime(2026, 11, d - 31, h, 17, tzinfo=TZ)
+        r = game.play(g, [t1], [], set(), D(29), True)
+        self.assertEqual((r.streak, r.xp, r.week_total), (1, 0, 0))       # Essay is due next week
+        r = game.play(g, [t1], ["a" * 10], set(), D(30), True)            # tapped Done four days early
+        self.assertEqual(r.done_now, [("Essay 2", 40)])
+        self.assertEqual((r.streak, r.streak_event), (2, "record"))
+        t2 = {"id": "b" * 10, "kind": "hw", "title": "Lab 4", "due": "2026-10-31"}
+        game.play(g, [t2], [], set(), D(30, 12), False)
+        r = game.play(g, [], [], set(), D(32), True)                      # Nov 1: Lab 4 went overdue
+        self.assertEqual((r.streak, r.streak_event, r.broke_on), (0, "broken", "Lab 4"))
+        self.assertEqual(r.best, 2)
+
+    def test_game_bills_score_when_paid_notice_arrives(self):
+        from brief import game
+        g = {}
+        bill = {"id": "c" * 10, "kind": "bill", "title": "Chase", "who": "Chase", "account": "main", "due": "2026-11-01"}
+        game.play(g, [bill], [], set(), datetime(2026, 10, 29, 7, 17, tzinfo=TZ), True)
+        r = game.play(g, [], [], {("main", "Chase")}, datetime(2026, 10, 30, 7, 17, tzinfo=TZ), True)
+        self.assertEqual(r.done_now, [("Chase", 20)])
+
+    def test_game_taps_only_from_your_chat(self):
+        from brief import game, telegram as tgm
+        ups = [{"update_id": 1, "callback_query": {"data": "done:" + "a" * 10, "message": {"chat": {"id": 42}}}},
+               {"update_id": 2, "callback_query": {"data": "done:" + "b" * 10, "message": {"chat": {"id": 999}}}},
+               {"update_id": 3, "callback_query": {"data": "rm -rf", "message": {"chat": {"id": 42}}}}]
+        self.assertEqual(game.taps(ups, "42"), ["a" * 10])
+        kb = tgm.keyboard([("✓ Essay", "done:" + "a" * 10)])
+        self.assertEqual(kb["inline_keyboard"][0][0]["callback_data"], "done:" + "a" * 10)
+
+    def test_game_end_to_end(self):
+        import json, os, tempfile
+        import brief.main as bm
+        import brief.telegram as tgm
+        from brief import game
+        sent = []
+        self._orig_send = tgm.send
+        tgm.send = lambda tok, chat, html, buttons=None: sent.append((html, buttons))
+        cfg = bm.load_config()
+        cfg["delivery"]["channels"] = ["telegram", "email"]
+        bm.load_config = lambda path=None: cfg
+        os.environ.update(TELEGRAM_BOT_TOKEN="t", TELEGRAM_CHAT_ID="42")
+        path = os.path.join(tempfile.mkdtemp(), "state.json")
+        g = FakeGoogle(MAIN)
+        run(["--force", "--state", path], google=g, now=NOW)
+        html, buttons = sent[-1]
+        labels = [label for label, _ in buttons]
+        self.assertTrue(any("Final Project: Proposal" in x for x in labels), labels)
+        self.assertTrue(any(x.startswith("✓ Paid") for x in labels), labels)
+        self.assertIn("Mark I", html)
+        fp = next(data for label, data in buttons if "Final Project" in label)
+        tgm.updates = lambda token, offset=None: [{"update_id": 7, "callback_query": {"data": fp, "message": {"chat": {"id": 42}}}}]
+        run(["--force", "--state", path], google=g, now=NOW.replace(hour=12, minute=40))
+        html2, buttons2 = sent[-1]
+        self.assertNotIn("Fri 10/30 · Final Project: Proposal (ML)", html2)   # done items leave the coursework list
+        self.assertNotIn("Final Project", "".join(label for label, _ in buttons2))   # and lose their button
+        self.assertIn("Final Project: Proposal", html2)                     # ...but Bruno acknowledges them
+        self.assertIn("XP", html2)
+        self.assertIn("Level", FakeGoogle.sent[3])                          # the email has the scoreboard
+        tgm.send = self._orig_send
+        with open(path) as f:
+            st = json.load(f)
+        self.assertEqual(st["tg_offset"], 8)
+        self.assertGreater(st["game"]["xp"], 0)
+
     def test_paid_settles_due(self):
         paid = msg("c9", "noreplyalerts@chase.com", "We've received your Sample Visa payment", day=28)
         self.assertNotIn("$40.00", self.run_text(FakeGoogle(MAIN + [paid])))
@@ -390,7 +477,7 @@ class Tests(unittest.TestCase):
         import brief.telegram as tgm
         sent = []
         orig_send, orig_load = tgm.send, bm.load_config
-        tgm.send = lambda tok, chat, html: sent.append(html)
+        tgm.send = lambda tok, chat, html, buttons=None: sent.append(html)
         cfg = orig_load()
         cfg["delivery"]["channels"] = ["telegram", "email"]
         bm.load_config = lambda path=None: cfg

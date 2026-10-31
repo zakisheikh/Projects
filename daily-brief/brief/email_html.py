@@ -146,11 +146,36 @@ def chapter(lead, items, today, notes=(), line=""):
             f'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">{rows}</table></td></tr>{space(52)}')
 
 
+def scoreboard(blk, game_rep):
+    """The to-do game: three figures, the week as a filling line, and Bruno's remarks."""
+    from .game import level_name
+    g = game_rep
+
+    def fig(value, label, hot=False):
+        return (f'<td valign="top" style="padding-right:30px"><div class="{"" if hot else "ink"}" style="font:200 34px/36px {SANS};'
+                f'color:{ACCENT if hot else INK};letter-spacing:-.03em;white-space:nowrap">{e(value)}</div><div style="margin-top:6px">{caps(label)}</div></td>')
+    figures = (f'<table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>{fig(level_name(g.level), "Level")}'
+               f'{fig(g.xp, "XP")}{fig(g.streak, "Day streak", g.streak_event == "record")}</tr></table>'
+               f'<div style="margin-top:14px">{small(e(f"{g.to_next} XP to {level_name(g.level + 1)}"))}</div>')
+    week = ""
+    if g.week_total:
+        cells = "".join(f'<td class="{"" if n < g.week_done else "bar"}" style="height:6px;line-height:6px;font-size:0;'
+                        f'background:{ACCENT if n < g.week_done else HAIR}">&nbsp;</td>' for n in range(g.week_total))
+        week = (f'<div style="margin-top:26px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" '
+                f'style="table-layout:fixed;border-collapse:separate;border-spacing:3px 0"><tr>{cells}</tr></table>'
+                f'<div style="margin-top:8px">{caps(f"This week · {g.week_done} of {g.week_total} done")}</div></div>')
+    notes = "".join(f'<div style="margin-top:18px">{t(e(n), 18, 400, "ink", INK, SERIF, "font-style:italic")}</div>' for n in blk.notes)
+    hint = small("Tap Done under the Telegram brief to score an item.", extra="margin-top:18px")
+    return (f'<tr><td class="pad" style="padding:0 40px">'
+            f'{t(e(blk.lead.rstrip(":")), 24, 400, family=SERIF, cls="ink lead", extra="letter-spacing:-.01em;margin:0 0 20px")}'
+            f'{figures}{week}{notes}{hint}</td></tr>{space(52)}')
+
+
 def remark(text):
     return (f'<tr><td class="pad" style="padding:0 40px">{t(e(text), 21, 400, "soft voice", SOFT, SERIF, "font-style:italic")}</td></tr>{space(52)}')
 
 
-def render(blocks, header, now, footer, preheader="", links=()):
+def render(blocks, header, now, footer, preheader="", links=(), game_rep=None):
     today = now.date()
     by = {b.key: b for b in blocks}
     urgent_n = len([i for i in by["priority"].items if i.kind not in ("followup", "more")]) if "priority" in by else 0
@@ -169,7 +194,7 @@ def render(blocks, header, now, footer, preheader="", links=()):
     nav = "".join(f'<a href="{e(url)}" class="ink" style="color:{INK};font:400 14px/20px {SANS};margin-left:18px;border-bottom:1px solid {INK}">{e(label)}</a>' for label, url in links)
 
     body = []
-    for key in ("priority", "allclear", "schedule", "schedule_empty", "early", "homework", "homework_none", "exams", "notices", "followup",
+    for key in ("priority", "allclear", "game", "schedule", "schedule_empty", "early", "homework", "homework_none", "exams", "notices", "followup",
                 "paid", "people", "school", "invites", "health", "admin", "travel", "renewals", "action", "other"):
         blk = by.get(key)
         if not blk:
@@ -179,6 +204,9 @@ def render(blocks, header, now, footer, preheader="", links=()):
                 body.append(chapter("Follow up with", blk.items, today))
         elif key in ("allclear", "schedule_empty", "homework_none", "early"):
             body.append(remark(blk.text))
+        elif key == "game":
+            if game_rep:
+                body.append(scoreboard(blk, game_rep))
         elif key == "schedule":
             body.append(chapter(blk.lead, blk.items, today, blk.notes, day_line(blk.items)))
         else:

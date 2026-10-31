@@ -16,6 +16,10 @@ url = "https://mail.google.com/mail/u/0/#inbox"
 label = "Calendar"
 url = "https://calendar.google.com/calendar/r/day"
 
+[game]
+enabled = true      # XP, levels ("Mark I", "Mark II"...), a streak of days with nothing overdue, a weekly score
+max_buttons = 8     # Done buttons under the Telegram brief
+
 [brief]
 telegram_max_priority = 3   # Telegram stays short: only this many urgent items...
 telegram_max_events = 4     # ...and this many of today's events; the rest is in the email

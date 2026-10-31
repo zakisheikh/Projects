@@ -25,10 +25,32 @@ def chunks(text, limit=LIMIT):
     return out
 
 
-def send(token, chat_id, html_text):
-    for part in chunks(html_text):
-        body = json.dumps({"chat_id": chat_id, "text": part, "parse_mode": "HTML",
-                           "disable_web_page_preview": True}).encode()
+def keyboard(buttons):
+    """[(label, data)] -> one Done button per row."""
+    return {"inline_keyboard": [[{"text": label[:60], "callback_data": data}] for label, data in buttons]}
+
+
+def updates(token, offset=None):
+    """Button taps waiting since the last brief. Telegram keeps them for about a day, which covers the
+    gap between briefs; reading does not consume them until we ask again with a higher offset."""
+    url = f"https://api.telegram.org/bot{token}/getUpdates?timeout=0&allowed_updates=%5B%22callback_query%22%5D"
+    if offset:
+        url += f"&offset={int(offset)}"
+    try:
+        with urllib.request.urlopen(url, timeout=30) as r:
+            data = json.load(r)
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"telegram {e.code}: {e.read().decode()[:200]}") from None
+    return data.get("result", []) if data.get("ok") else []
+
+
+def send(token, chat_id, html_text, buttons=None):
+    parts = chunks(html_text)
+    for n, part in enumerate(parts):
+        payload = {"chat_id": chat_id, "text": part, "parse_mode": "HTML", "disable_web_page_preview": True}
+        if buttons and n == len(parts) - 1:
+            payload["reply_markup"] = keyboard(buttons)
+        body = json.dumps(payload).encode()
         req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=body,
                                      headers={"Content-Type": "application/json"})
         try:

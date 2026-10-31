@@ -273,3 +273,38 @@ invites_open = [
   "Someone has invited you to something:",
   "Calendar invitations:",
 ]
+
+# ---------------------------------------------------------------- the to-do game
+game_lead = ["The scoreboard:", "Your standing, {sir}:", "Keeping score:", "The tally:"]
+game_done = [
+  "Noted, {sir}: {items}. {xp} XP to your name.",
+  "Marked done: {items}. That's {xp} XP.",
+  "Well handled. {items}, for {xp} XP.",
+  "{items}: done and dusted. {xp} XP.",
+  "I've logged {items}. {xp} XP, {sir}.",
+]
+game_level_up = [
+  "Promoted to {level}, {sir}. The new suit fits rather well.",
+  "Level up: {level}. I've updated the records.",
+  "{level}, {sir}. Do try not to let it go to your head.",
+  "Welcome to {level}. Onwards.",
+]
+game_streak_record = [
+  "{n} days without anything overdue. A personal best, {sir}.",
+  "New record: a {n}-day streak. I'm almost impressed.",
+  "{n} days clean. That's the longest yet.",
+]
+game_streak_broken = [
+  "The streak ends here, I'm afraid. {item} slipped past its date.",
+  "Back to zero, {sir}. {item} went overdue.",
+  "A setback: {item} is overdue, so the streak resets.",
+]
+game_recap = [
+  "Week in review: {done} of {total} done, {xp} XP earned, best streak {best} days.",
+  "This week's ledger: {done} of {total} finished, {xp} XP. Your best streak stands at {best}.",
+]
+game_nudge = [
+  "Nothing ticked off yet this week, {sir}. The Done buttons are right there.",
+  "The scoreboard is looking lonely this week.",
+  "No points on the board yet this week. Shall we change that?",
+]
